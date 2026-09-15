@@ -9,6 +9,7 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    seed: 'tsx prisma/seed/seed.ts',
   },
   datasource: {
     // No se usa env('DATABASE_URL') porque lanza error si falta, y eso rompería
