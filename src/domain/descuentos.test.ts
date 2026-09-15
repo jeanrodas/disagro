@@ -73,7 +73,7 @@ describe('descuento de SERVICIOS', () => {
     [2, '1500.00', 3],
     [2, '1500.01', 5],
     [7, '8930.00', 5],
-  ] as const)('porcentajeServicios(%i, %s) => %i%%', (cantidad, suma, esperado) => {
+  ] as const)('porcentajeServicios(%i, %s) => %i por ciento', (cantidad, suma, esperado) => {
     expect(porcentajeServicios(cantidad, new Decimal(suma))).toBe(esperado);
   });
 });
@@ -88,7 +88,7 @@ describe('descuento de PRODUCTOS', () => {
     [5, 5],
     [6, 5],
     [10, 5],
-  ] as const)('%i productos => %i%%', (cantidad, esperado) => {
+  ] as const)('%i productos => %i por ciento', (cantidad, esperado) => {
     expect(calcularDescuentos(nProductos(cantidad)).productos.porcentaje).toBe(esperado);
     expect(porcentajeProductos(cantidad)).toBe(esperado);
   });
