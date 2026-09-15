@@ -1,4 +1,5 @@
 import { prisma } from '../../src/lib/prisma';
+import { sembrarAdmin } from './admin.seed';
 import { CATEGORIAS, ITEMS } from './catalogo.data';
 
 /**
@@ -43,6 +44,10 @@ async function main() {
     `[seed] Catálogo sincronizado: ${categorias} categorías, ${servicios + productos} items ` +
       `(${servicios} servicios, ${productos} productos)`,
   );
+
+  // Admin inicial desde ADMIN_USER y ADMIN_PASSWORD (única vía para crear administradores)
+  const admin = await sembrarAdmin();
+  console.log(`[seed] Admin "${admin.usuario}": ${admin.resultado}`);
 }
 
 main()

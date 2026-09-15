@@ -6,7 +6,6 @@ import { z } from 'zod';
  * Si falta o es inválida alguna variable, el proceso termina de inmediato
  * (fail fast) en lugar de fallar más tarde en medio de una petición.
  *
- * Se irán agregando variables (DATABASE_URL, JWT_SECRET, RESEND_API_KEY...)
  * en la fase donde cada una empiece a usarse.
  */
 /** Variable opcional: vacía o ausente se trata como undefined. */
@@ -39,3 +38,30 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProduction = env.NODE_ENV === 'production';
+
+/**
+ * Credenciales del admin inicial. Se validan aparte porque solo las usa el seed:
+ * el servidor arranca sin ellas.
+ */
+const credencialesAdminSchema = z.object({
+  ADMIN_USER: z
+    .string({ error: 'ADMIN_USER es obligatoria para crear el admin' })
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9._-]{3,50}$/, 'ADMIN_USER debe tener de 3 a 50 caracteres: letras, números, punto, guion o guion bajo'),
+  ADMIN_PASSWORD: z
+    .string({ error: 'ADMIN_PASSWORD es obligatoria para crear el admin' })
+    .min(12, 'ADMIN_PASSWORD debe tener al menos 12 caracteres')
+    .refine((password) => Buffer.byteLength(password, 'utf8') <= 72, 'ADMIN_PASSWORD no puede superar 72 bytes (límite de bcrypt)')
+    .refine((password) => password !== 'cambiar_esta_password', 'ADMIN_PASSWORD todavía tiene el valor de ejemplo'),
+});
+
+/** Lanza un Error con el detalle si ADMIN_USER o ADMIN_PASSWORD faltan o son inválidas. */
+export function leerCredencialesAdmin(fuente: NodeJS.ProcessEnv = process.env) {
+  const resultado = credencialesAdminSchema.safeParse(fuente);
+  if (!resultado.success) {
+    const detalle = resultado.error.issues.map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`).join('\n');
+    throw new Error(`Credenciales del admin inválidas:\n${detalle}`);
+  }
+  return { usuario: resultado.data.ADMIN_USER, password: resultado.data.ADMIN_PASSWORD };
+}
