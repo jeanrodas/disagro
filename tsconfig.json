@@ -1,11 +1,13 @@
 {
+  // Configuración base: la usa `tsc --noEmit` y el editor.
+  // Revisa tipos de TODO el proyecto (código, seed, tests, config de Prisma).
+  // El build usa tsconfig.build.json, que solo compila src/ sin tests.
   "compilerOptions": {
     "target": "ES2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "lib": ["ES2022"],
-    "rootDir": "src",
-    "outDir": "dist",
+    "noEmit": true,
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -20,6 +22,6 @@
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "prisma.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
