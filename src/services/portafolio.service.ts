@@ -35,6 +35,7 @@ export interface CodigoDto {
 
 export interface PortafolioDto {
   cliente: {
+    id: string;
     nombre: string;
     apellidos: string;
     email: string;
@@ -68,10 +69,12 @@ const aTotalesDto = ({ subtotal, porcentaje, descuento, total }: TotalesPorTipo)
   total: aMoneda(total),
 });
 
-export async function obtenerPortafolio(clienteId: string): Promise<PortafolioDto> {
+/** Portafolio de un cliente, o null si no existe. Lo usan el cliente y el panel admin. */
+export async function buscarPortafolio(clienteId: string): Promise<PortafolioDto | null> {
   const cliente = await prisma.cliente.findUnique({
     where: { id: clienteId },
     select: {
+      id: true,
       nombre: true,
       apellidos: true,
       email: true,
@@ -88,7 +91,7 @@ export async function obtenerPortafolio(clienteId: string): Promise<PortafolioDt
     },
   });
 
-  if (!cliente) throw HttpError.notFound('Portafolio no encontrado');
+  if (!cliente) return null;
 
   const { selecciones, codigos, ...datosCliente } = cliente;
   const items = selecciones.map((seleccion) => seleccion.item);
@@ -113,4 +116,11 @@ export async function obtenerPortafolio(clienteId: string): Promise<PortafolioDt
       total: aMoneda(totales.total),
     },
   };
+}
+
+/** Portafolio del cliente de la sesión; 404 si el cliente ya no existe. */
+export async function obtenerPortafolio(clienteId: string): Promise<PortafolioDto> {
+  const portafolio = await buscarPortafolio(clienteId);
+  if (!portafolio) throw HttpError.notFound('Portafolio no encontrado');
+  return portafolio;
 }

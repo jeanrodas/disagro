@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as adminAuthController from '../controllers/admin-auth.controller';
+import * as adminClientesController from '../controllers/admin-clientes.controller';
 import { requiereAdmin } from '../middlewares/admin.middleware';
 
 /** Rutas bajo /api/admin */
@@ -13,3 +14,5 @@ adminRouter.post('/logout', adminAuthController.logout);
 adminRouter.use(requiereAdmin);
 
 adminRouter.get('/me', adminAuthController.me);
+adminRouter.get('/clientes', adminClientesController.listarClientes);
+adminRouter.get('/clientes/:id', adminClientesController.obtenerCliente);
