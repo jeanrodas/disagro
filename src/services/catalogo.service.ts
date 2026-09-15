@@ -21,7 +21,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 const escaparComodinesLike = (texto: string) => texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
 
-const itemSelect = {
+export const itemSelect = {
   id: true,
   nombre: true,
   descripcion: true,
@@ -33,10 +33,14 @@ const itemSelect = {
   categoria: { select: { id: true, nombre: true } },
 } satisfies Prisma.ItemSelect;
 
-type ItemConCategoria = Prisma.ItemGetPayload<{ select: typeof itemSelect }>;
+export type ItemConCategoria = Prisma.ItemGetPayload<{ select: typeof itemSelect }>;
 
 /** El precio viaja como string con 2 decimales ("850.00") para no perder precisión en JSON. */
 export type ItemDto = Omit<ItemConCategoria, 'precio'> & { precio: string };
+
+export function aItemDto({ precio, ...item }: ItemConCategoria): ItemDto {
+  return { ...item, precio: precio.toFixed(2) };
+}
 
 export async function listarItems(filtros: FiltrosCatalogo): Promise<ItemDto[]> {
   const where: Prisma.ItemWhereInput = {};
@@ -65,7 +69,7 @@ export async function listarItems(filtros: FiltrosCatalogo): Promise<ItemDto[]> 
     orderBy: [{ tipo: 'asc' }, { nombre: 'asc' }],
   });
 
-  return items.map(({ precio, ...item }) => ({ ...item, precio: precio.toFixed(2) }));
+  return items.map(aItemDto);
 }
 
 export interface CategoriaDto {
