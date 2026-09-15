@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { healthRouter } from './routes/health.routes';
+import { apiRouter } from './routes';
 
 /**
  * Construye la app de Express sin levantar el servidor.
@@ -25,6 +26,7 @@ export function createApp() {
   app.use(express.json({ limit: '100kb' }));
 
   app.use('/health', healthRouter);
+  app.use('/api', apiRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
