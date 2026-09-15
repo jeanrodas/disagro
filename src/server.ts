@@ -1,5 +1,6 @@
 import { createApp } from './app';
 import { env } from './config/env';
+import { prisma } from './lib/prisma';
 
 const app = createApp();
 
@@ -13,7 +14,10 @@ const server = app.listen(env.PORT, () => {
  */
 function shutdown(signal: string) {
   console.log(`[server] ${signal} recibido, cerrando...`);
-  server.close(() => process.exit(0));
+  server.close(async () => {
+    await prisma.$disconnect(); // cierra el pool de conexiones a Postgres
+    process.exit(0);
+  });
   // Si algo queda colgado, forzar la salida
   setTimeout(() => process.exit(1), 10_000).unref();
 }

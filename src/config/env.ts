@@ -13,6 +13,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   APP_URL: z.url().default('http://localhost:5173'),
+  DATABASE_URL: z.url({
+    protocol: /^postgres(ql)?$/,
+    error: 'Debe ser una URL de PostgreSQL (postgresql://usuario:password@host:puerto/bd)',
+  }),
 });
 
 const parsed = envSchema.safeParse(process.env);
