@@ -4,6 +4,9 @@ node_modules/
 # Build
 dist/
 
+# Cliente Prisma generado (se regenera con `prisma generate`)
+src/generated/
+
 # Variables de entorno (NUNCA subir secretos)
 .env
 .env.*
