@@ -1,0 +1,98 @@
+// Esquema de datos de la feria de promociones de Disagro.
+// La URL de conexión vive en prisma.config.ts (Prisma 7), no aquí.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoItem {
+  SERVICIO
+  PRODUCTO
+}
+
+enum EstadoCodigo {
+  EMITIDO
+  CANJEADO
+}
+
+model Categoria {
+  id     String   @id @default(uuid()) @db.Uuid
+  nombre String   @unique
+  tipo   TipoItem
+  items  Item[]
+
+  @@map("categorias")
+}
+
+model Item {
+  id           String          @id @default(uuid()) @db.Uuid
+  nombre       String          @unique
+  descripcion  String
+  precio       Decimal         @db.Decimal(10, 2)
+  tipo         TipoItem
+  imagenUrl    String          @map("imagen_url")
+  beneficios   String[]
+  fichaTecnica Json?           @map("ficha_tecnica")
+  categoriaId  String          @map("categoria_id") @db.Uuid
+  categoria    Categoria       @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  selecciones  SeleccionItem[]
+
+  @@index([categoriaId])
+  @@index([tipo])
+  @@map("items")
+}
+
+model Cliente {
+  id           String            @id @default(uuid()) @db.Uuid
+  nombre       String
+  apellidos    String
+  email        String            @unique
+  fechaEvento  DateTime          @map("fecha_evento") @db.Timestamptz(3)
+  confirmadoEn DateTime          @default(now()) @map("confirmado_en") @db.Timestamptz(3)
+  sessionToken String            @unique @map("session_token")
+  selecciones  SeleccionItem[]
+  codigos      CodigoDescuento[]
+
+  @@map("clientes")
+}
+
+model SeleccionItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  clienteId String  @map("cliente_id") @db.Uuid
+  itemId    String  @map("item_id") @db.Uuid
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([clienteId, itemId])
+  @@index([itemId])
+  @@map("selecciones_items")
+}
+
+model CodigoDescuento {
+  id         String       @id @default(uuid()) @db.Uuid
+  codigo     String       @unique
+  tipo       TipoItem
+  porcentaje Int
+  estado     EstadoCodigo @default(EMITIDO)
+  clienteId  String       @map("cliente_id") @db.Uuid
+  cliente    Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  creadoEn   DateTime     @default(now()) @map("creado_en") @db.Timestamptz(3)
+  canjeadoEn DateTime?    @map("canjeado_en") @db.Timestamptz(3)
+
+  @@index([clienteId])
+  @@map("codigos_descuento")
+}
+
+model Admin {
+  id           String @id @default(uuid()) @db.Uuid
+  usuario      String @unique
+  passwordHash String @map("password_hash")
+
+  @@map("admins")
+}
