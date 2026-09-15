@@ -6,6 +6,7 @@ import { z } from 'zod';
  * Si falta o es inválida alguna variable, el proceso termina de inmediato
  * (fail fast) en lugar de fallar más tarde en medio de una petición.
  *
+ * Se irán agregando variables (DATABASE_URL, JWT_SECRET, RESEND_API_KEY...)
  * en la fase donde cada una empiece a usarse.
  */
 /** Variable opcional: vacía o ausente se trata como undefined. */
@@ -20,6 +21,9 @@ const envSchema = z.object({
     protocol: /^postgres(ql)?$/,
     error: 'Debe ser una URL de PostgreSQL (postgresql://usuario:password@host:puerto/bd)',
   }),
+  // JWT_SECRET firma los tokens del admin: obligatoria, larga y nunca el valor de ejemplo
+  JWT_SECRET: z.string({ error: 'JWT_SECRET es obligatoria' }).min(32, 'JWT_SECRET debe tener al menos 32 caracteres')
+    .refine((valor) => valor !== 'reemplazar_por_un_secreto_largo_y_aleatorio', 'JWT_SECRET todavía tiene el valor de ejemplo'),
   // Opcional: sin key el correo de respaldo se omite y la confirmación funciona igual
   RESEND_API_KEY: opcional(z.string().startsWith('re_', 'RESEND_API_KEY debe empezar con "re_"')),
   // Desarrollo: onboarding@resend.dev | Producción: feria@jeanrodas.lat (sin tocar código)
