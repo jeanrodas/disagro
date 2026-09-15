@@ -1,5 +1,7 @@
 import type { Prisma, TipoItem } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
+import { escaparComodinesLike } from '../utils/like';
+import { esUuid } from '../utils/uuid';
 
 /**
  * Consultas del catálogo público.
@@ -12,14 +14,6 @@ export interface FiltrosCatalogo {
   categoria?: string | undefined;
   buscar?: string | undefined;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Prisma traduce `contains` a ILIKE '%texto%' sin escapar los comodines de LIKE:
- * sin esto, buscar "%" devolvería todo el catálogo y "_" cualquier carácter.
- */
-const escaparComodinesLike = (texto: string) => texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
 
 export const itemSelect = {
   id: true,
@@ -50,7 +44,7 @@ export async function listarItems(filtros: FiltrosCatalogo): Promise<ItemDto[]> 
   }
 
   if (filtros.categoria) {
-    where.categoria = UUID.test(filtros.categoria)
+    where.categoria = esUuid(filtros.categoria)
       ? { id: filtros.categoria }
       : { nombre: { equals: filtros.categoria, mode: 'insensitive' } };
   }
