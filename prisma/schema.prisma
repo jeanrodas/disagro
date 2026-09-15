@@ -55,6 +55,7 @@ model Cliente {
   email        String            @unique
   fechaEvento  DateTime          @map("fecha_evento") @db.Timestamptz(3)
   confirmadoEn DateTime          @default(now()) @map("confirmado_en") @db.Timestamptz(3)
+  /// SHA-256 (hex) del token de sesión. El token en claro solo vive en la cookie y en el enlace del correo.
   sessionToken String            @unique @map("session_token")
   selecciones  SeleccionItem[]
   codigos      CodigoDescuento[]

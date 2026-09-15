@@ -1,3 +1,4 @@
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -24,6 +25,7 @@ export function createApp() {
     }),
   );
   app.use(express.json({ limit: '100kb' }));
+  app.use(cookieParser()); // expone req.cookies para leer la cookie de sesión del cliente
 
   app.use('/health', healthRouter);
   app.use('/api', apiRouter);
