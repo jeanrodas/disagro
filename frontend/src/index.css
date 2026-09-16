@@ -1,1 +1,11 @@
-/* Estilos globales de la aplicación. Tailwind se agrega en el commit siguiente. */
+@import 'tailwindcss';
+
+/*
+ * Tailwind 4 se configura desde el CSS: este bloque @theme reemplaza al antiguo
+ * tailwind.config.js y genera utilidades como bg-disagro-verde o text-disagro-verde.
+ */
+@theme {
+  --color-disagro-verde: #00843d;
+  --color-disagro-verde-oscuro: #00632e;
+  --color-disagro-arena: #f5f3ec;
+}
