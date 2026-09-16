@@ -1,19 +1,20 @@
-import { useState } from 'react'
-import { CodigosConfirmados } from './pages/CodigosConfirmados'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { Confirmacion } from './pages/Confirmacion'
-import type { RespuestaConfirmacion } from './types/api'
 
 /**
- * Por ahora la app alterna entre el formulario y la pantalla de códigos con un
- * estado local. Cuando lleguen el portafolio y el panel admin se cambiará por
- * rutas de verdad (el enlace del correo abre /portafolio#token=...).
+ * Rutas de la aplicación.
+ *
+ * El formulario deja de navegar por estado local: ahora hay rutas de verdad,
+ * porque el enlace del correo apunta a una dirección concreta. La pantalla del
+ * portafolio y las del panel de administración se agregan en los commits
+ * siguientes.
  */
 export default function App() {
-  const [confirmacion, setConfirmacion] = useState<RespuestaConfirmacion | null>(null)
-
-  if (confirmacion) {
-    return <CodigosConfirmados respuesta={confirmacion} onVolver={() => setConfirmacion(null)} />
-  }
-
-  return <Confirmacion onConfirmado={setConfirmacion} />
+  return (
+    <Routes>
+      <Route path="/" element={<Confirmacion />} />
+      {/* Cualquier otra dirección vuelve al formulario */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }

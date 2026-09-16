@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { DatosCliente } from '../components/DatosCliente'
 import { Encabezado } from '../components/Encabezado'
 import { PanelSeleccion, type FiltroTipo } from '../components/PanelSeleccion'
@@ -8,15 +9,12 @@ import { CorreoYaConfirmadoError, confirmarAsistencia } from '../lib/api/confirm
 import { esApiError, mensajeDeCampo } from '../lib/api/http'
 import { calcularDescuentosPreview } from '../lib/descuentos-preview'
 import { emailValido as esEmailValido, validarFormulario, type DatosFormulario, type ErroresFormulario } from '../lib/validacion-formulario'
-import type { Item, RespuestaConfirmacion } from '../types/api'
-
-interface Props {
-  onConfirmado: (respuesta: RespuestaConfirmacion) => void
-}
+import type { Item } from '../types/api'
 
 const DATOS_VACIOS: DatosFormulario = { nombre: '', apellidos: '', email: '', fechaEvento: '' }
 
-export function Confirmacion({ onConfirmado }: Props) {
+export function Confirmacion() {
+  const navigate = useNavigate()
   const [datos, setDatos] = useState<DatosFormulario>(DATOS_VACIOS)
   const [erroresLocales, setErroresLocales] = useState<ErroresFormulario>({})
   const [items, setItems] = useState<Item[]>([])
@@ -90,6 +88,26 @@ export function Confirmacion({ onConfirmado }: Props) {
 
   const puedeConfirmar = emailValido && seleccionados.size > 0 && !enviando
 
+  /**
+   * El backend devuelve una URL absoluta en el 409. Si es de este mismo origen se
+   * navega con el router, sin recargar la página; si algún día apuntara a otro
+   * dominio, se abre tal cual.
+   */
+  const irAlPortafolio = () => {
+    const destino = yaConfirmado?.url
+    if (!destino) {
+      navigate('/portafolio')
+      return
+    }
+    try {
+      const url = new URL(destino)
+      if (url.origin === window.location.origin) navigate(url.pathname + url.search + url.hash)
+      else window.location.assign(destino)
+    } catch {
+      navigate('/portafolio')
+    }
+  }
+
   const confirmar = async () => {
     setErrorApi(null)
     setErrorGeneral(null)
@@ -103,8 +121,9 @@ export function Confirmacion({ onConfirmado }: Props) {
 
     setEnviando(true)
     try {
-      const respuesta = await confirmarAsistencia({ ...datos, itemIds: [...seleccionados] })
-      onConfirmado(respuesta)
+      await confirmarAsistencia({ ...datos, itemIds: [...seleccionados] })
+      // La confirmación deja la cookie de sesión: el portafolio se carga con ella
+      navigate('/portafolio')
     } catch (error) {
       if (error instanceof CorreoYaConfirmadoError) {
         setYaConfirmado({ mensaje: error.message, url: error.portafolioUrl })
@@ -136,14 +155,14 @@ export function Confirmacion({ onConfirmado }: Props) {
             <p className="font-titulo text-sm font-bold text-[#7a5a12]">Este correo ya confirmó su asistencia</p>
             <p className="text-[12.5px] text-[#8a6a2a]">{yaConfirmado.mensaje}</p>
           </div>
-          {yaConfirmado.url && (
-            <a
-              href={yaConfirmado.url}
-              className="rounded-full bg-disagro-verde px-4 py-2.5 font-titulo text-[13px] font-bold text-white transition hover:bg-disagro-verde-oscuro"
-            >
-              Ver mi portafolio →
-            </a>
-          )}
+          <button
+            type="button"
+            onClick={irAlPortafolio}
+            data-testid="ver-portafolio"
+            className="rounded-full bg-disagro-verde px-4 py-2.5 font-titulo text-[13px] font-bold text-white transition hover:bg-disagro-verde-oscuro"
+          >
+            Ver mi portafolio →
+          </button>
         </div>
       )}
 
