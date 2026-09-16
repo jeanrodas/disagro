@@ -61,11 +61,18 @@ export function TarjetaCodigo({ codigo }: Props) {
         </button>
       </div>
 
-      {canjeado && (
-        <p className="relative mt-3 inline-block rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold text-white">
-          Canjeado{codigo.canjeadoEn ? ` el ${formatearFecha(codigo.canjeadoEn)}` : ''}
-        </p>
-      )}
+      {/* El estado se muestra siempre: al cliente le dice si ya lo usó y al admin
+          le permite distinguir de un vistazo los canjeados de los pendientes. */}
+      <p
+        className={`relative mt-3 inline-block rounded-full px-3 py-1 text-[11px] font-semibold ${
+          canjeado ? 'bg-black/25 text-white' : 'bg-white/25 text-white'
+        }`}
+        data-testid="estado-codigo"
+      >
+        {canjeado
+          ? `Canjeado${codigo.canjeadoEn ? ` el ${formatearFecha(codigo.canjeadoEn)}` : ''}`
+          : 'Sin canjear'}
+      </p>
     </div>
   )
 }
