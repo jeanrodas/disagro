@@ -2,7 +2,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { env } from './config/env';
+import { env, interpretarTrustProxy } from './config/env';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import { healthRouter } from './routes/health.routes';
 import { apiRouter } from './routes';
@@ -14,8 +14,10 @@ import { apiRouter } from './routes';
 export function createApp() {
   const app = express();
 
-  // Detrás de un proxy (Docker/nginx) para que req.ip y cookies "secure" funcionen
-  app.set('trust proxy', 1);
+  // Cuántos proxies hay delante (TRUST_PROXY). De esto depende qué IP ve el rate
+  // limiting: con un valor incorrecto, o todos los clientes comparten contador o
+  // cualquiera puede falsificar el suyo. En local: false; en producción: 1.
+  app.set('trust proxy', interpretarTrustProxy());
 
   app.use(helmet());
   app.use(

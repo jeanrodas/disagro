@@ -17,6 +17,15 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   APP_URL: z.url().default('http://localhost:5173'),
+  // Cuántos proxies hay delante de la app (ver interpretarTrustProxy)
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .default('false')
+    .refine(
+      (valor) => valor !== 'true',
+      'TRUST_PROXY no puede ser "true": confiar en todas las cabeceras permite falsificar la IP. Usa el número de proxies (1), "loopback" o la lista de IPs.',
+    ),
   DATABASE_URL: z.url({
     protocol: /^postgres(ql)?$/,
     error: 'Debe ser una URL de PostgreSQL (postgresql://usuario:password@host:puerto/bd)',
@@ -42,6 +51,28 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProduction = env.NODE_ENV === 'production';
+
+/**
+ * Valor de 'trust proxy' para Express, a partir de TRUST_PROXY.
+ *
+ * En local NO hay proxy y el valor es false: si se confiara en X-Forwarded-For
+ * sin tener un proxy delante, cualquiera podría inventar esa cabecera, aparecer
+ * con una IP distinta en cada petición y saltarse el rate limiting.
+ *
+ * En producción la app va detrás de un proxy (el hosting o nginx), así que se
+ * indica cuántos saltos confiables hay —normalmente 1— y Express toma como
+ * req.ip la IP real del cliente en lugar de la del proxy.
+ *
+ *   TRUST_PROXY=false          desarrollo local, sin proxy
+ *   TRUST_PROXY=1              un proxy delante (lo habitual en producción)
+ *   TRUST_PROXY=loopback       confía solo en 127.0.0.1 / ::1
+ *   TRUST_PROXY=10.0.0.1,...   lista de proxies concretos
+ */
+export function interpretarTrustProxy(valor: string = env.TRUST_PROXY): boolean | number | string {
+  if (valor === '' || valor === 'false') return false;
+  if (/^\d+$/.test(valor)) return Number(valor);
+  return valor;
+}
 
 /**
  * Credenciales del admin inicial. Se validan aparte porque solo las usa el seed:
