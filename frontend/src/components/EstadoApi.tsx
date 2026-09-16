@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ApiError, apiFetch } from '../lib/api/http'
-import type { RespuestaItems } from '../types/api'
+import { obtenerItems } from '../lib/api/catalogo'
+import { ApiError } from '../lib/api/http'
 
 type Estado =
   | { fase: 'cargando' }
@@ -15,7 +15,7 @@ export function EstadoApi() {
   const [estado, setEstado] = useState<Estado>({ fase: 'cargando' })
 
   useEffect(() => {
-    apiFetch<RespuestaItems>('/api/items')
+    obtenerItems()
       .then((respuesta) => setEstado({ fase: 'ok', total: respuesta.total }))
       .catch((error: unknown) =>
         setEstado({
