@@ -21,3 +21,26 @@ export function formatearFecha(fecha: FechaIso): string {
     timeZone: 'America/Guatemala',
   }).format(new Date(fecha))
 }
+
+/**
+ * Las claves de la ficha técnica las define el catálogo y cambian por item
+ * ("tiempoEntregaDias", "dosisReferencia"...). Se separan las palabras y se
+ * respetan las siglas: "NDVI" no se convierte en "Ndvi".
+ */
+export function formatearClaveFicha(clave: string): string {
+  const palabras = clave.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' ')
+  return palabras
+    .map((palabra, indice) => {
+      if (indice === 0) return palabra.charAt(0).toUpperCase() + palabra.slice(1)
+      return palabra === palabra.toUpperCase() ? palabra : palabra.toLowerCase()
+    })
+    .join(' ')
+}
+
+/** Los valores de la ficha pueden ser texto, número o lista. */
+export function formatearValorFicha(valor: unknown): string {
+  if (Array.isArray(valor)) return valor.map((elemento) => String(elemento)).join(' · ')
+  if (valor === null || valor === undefined) return '—'
+  if (typeof valor === 'object') return JSON.stringify(valor)
+  return String(valor)
+}

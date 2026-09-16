@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatearFecha, formatearQuetzales } from './formato'
+import { formatearClaveFicha, formatearFecha, formatearQuetzales, formatearValorFicha } from './formato'
 
 describe('formatearQuetzales', () => {
   it.each([
@@ -20,5 +20,36 @@ describe('formatearQuetzales', () => {
 describe('formatearFecha', () => {
   it('muestra la fecha del evento en hora de Guatemala', () => {
     expect(formatearFecha('2026-10-15T06:00:00.000Z')).toBe('15 de octubre de 2026')
+  })
+})
+
+describe('formatearClaveFicha', () => {
+  it.each([
+    ['tiempoEntregaDias', 'Tiempo entrega dias'],
+    ['dosisReferencia', 'Dosis referencia'],
+    ['presentacion', 'Presentacion'],
+    ['areaIncluida', 'Area incluida'],
+  ])('%s => %s', (clave, esperado) => {
+    expect(formatearClaveFicha(clave)).toBe(esperado)
+  })
+
+  it('respeta las siglas', () => {
+    expect(formatearClaveFicha('indicesNDVI')).toBe('Indices NDVI')
+  })
+})
+
+describe('formatearValorFicha', () => {
+  it('une las listas con separador', () => {
+    expect(formatearValorFicha(['NDVI', 'NDRE'])).toBe('NDVI · NDRE')
+  })
+
+  it('convierte números y textos', () => {
+    expect(formatearValorFicha(7)).toBe('7')
+    expect(formatearValorFicha('Saco de 50 kg')).toBe('Saco de 50 kg')
+  })
+
+  it('no rompe con valores ausentes', () => {
+    expect(formatearValorFicha(null)).toBe('—')
+    expect(formatearValorFicha(undefined)).toBe('—')
   })
 })
