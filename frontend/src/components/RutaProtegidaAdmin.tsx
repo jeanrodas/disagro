@@ -30,6 +30,11 @@ export function RutaProtegidaAdmin() {
 
   useEffect(() => {
     let vigente = true
+    // Intencionado: 'verificando' es el estado de arranque de una sincronización con un
+    // sistema externo (GET /api/admin/me), que es justo el caso que la regla permite. No
+    // se puede derivar en render ni inicializar en useState porque debe volver a 'verificando'
+    // en cada reintento, cuando cambia `intento`.
+    // oxlint-disable-next-line react/set-state-in-effect
     setEstado({ fase: 'verificando' })
 
     obtenerAdminActual()

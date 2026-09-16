@@ -46,6 +46,11 @@ export function PanelAdmin() {
   // no una por tecla.
   useEffect(() => {
     let vigente = true
+    // Intencionado: marca "cargando" al cambiar la búsqueda o la página, antes de que el
+    // debounce dispare la petición. Es el arranque de una sincronización con el backend,
+    // no un valor derivable en render: sin esto la tabla mostraría los datos del término
+    // anterior mientras llega la respuesta del nuevo.
+    // oxlint-disable-next-line react/set-state-in-effect
     setCargandoLista(true)
     const temporizador = setTimeout(() => {
       listarClientes({ page: pagina, limit: POR_PAGINA, buscar: busqueda.trim() || undefined })

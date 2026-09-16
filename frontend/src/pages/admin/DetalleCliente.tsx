@@ -52,6 +52,10 @@ export function DetalleCliente() {
   }, [id, navigate])
 
   useEffect(() => {
+    // Intencionado: `cargar` pone la fase en 'cargando' antes de pedir el cliente al
+    // backend. Es el arranque de una sincronización con un sistema externo, y depende
+    // del :id de la ruta, así que no puede resolverse en render ni en useState.
+    // oxlint-disable-next-line react/set-state-in-effect
     void cargar()
   }, [cargar])
 
