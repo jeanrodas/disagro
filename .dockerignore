@@ -1,0 +1,35 @@
+# Contexto de build del backend.
+#
+# Lista de PERMITIDOS: se ignora todo y solo se deja entrar lo que el Dockerfile
+# copia. Es más seguro que enumerar lo prohibido, porque un fichero nuevo (un
+# .env.produccion, un volcado de la BD, una clave) queda fuera sin acordarse de él.
+# De paso el contexto es pequeño y el build no manda cientos de MB al daemon.
+*
+
+!package.json
+!package-lock.json
+!prisma.config.ts
+!tsconfig.json
+!tsconfig.build.json
+!src
+!prisma
+!docker-entrypoint.sh
+
+# Dentro de lo permitido, lo que tampoco debe entrar.
+# Van al final a propósito: en .dockerignore gana la última regla que coincide,
+# así que aunque alguien añada arriba un "!.env", estas lo vuelven a excluir.
+
+# Se generan DENTRO del contenedor: las copias del host son de Windows
+**/node_modules
+**/dist
+src/generated
+
+# No forman parte de la imagen de producción
+**/*.test.ts
+prisma/seed
+
+# Secretos y repositorio: nunca dentro de una imagen.
+# Las variables se inyectan en runtime (docker run -e / --env-file / compose).
+**/.env
+**/.env.*
+.git
