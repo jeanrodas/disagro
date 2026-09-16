@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as codigosController from '../controllers/codigos.controller';
+import { limitadorCanje } from '../middlewares/rate-limit.middleware';
 
 export const codigosRouter = Router();
 
@@ -13,4 +14,4 @@ export const codigosRouter = Router();
  * En un sistema real iría detrás de la autenticación del punto de venta, con
  * límite de intentos para frenar a quien pruebe códigos al azar.
  */
-codigosRouter.post('/codigos/canjear', codigosController.canjear);
+codigosRouter.post('/codigos/canjear', limitadorCanje, codigosController.canjear);
