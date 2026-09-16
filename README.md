@@ -67,6 +67,48 @@ Están documentadas en [`.env.example`](.env.example). Las que cambian por entor
   se omite y queda anotado en el log; la confirmación funciona igual.
 - `ADMIN_USER` y `ADMIN_PASSWORD`: solo las usa el seed del admin.
 
+## Docker (backend)
+
+El [`Dockerfile`](Dockerfile) construye una imagen de producción en tres etapas:
+`deps` instala solo dependencias de producción, `build` compila TypeScript y la
+etapa final copia únicamente `dist/`, esas dependencias, el schema y las migraciones.
+Corre con un usuario sin privilegios (`app`) y trae un `HEALTHCHECK` contra `/health`.
+
+```bash
+docker build -t disagro-backend .
+docker run -d --name disagro-backend -p 127.0.0.1:3000:3000 --env-file backend.env disagro-backend
+```
+
+Al arrancar, [`docker-entrypoint.sh`](docker-entrypoint.sh) aplica las migraciones y
+después levanta el servidor:
+
+- **`prisma migrate deploy`, no `migrate dev`.** `deploy` aplica las migraciones ya
+  versionadas en `prisma/migrations`, sin crear nuevas ni pedir confirmación, y no hace
+  nada si ya están aplicadas: es seguro repetirlo en cada arranque. `dev` puede generar
+  migraciones, es interactivo y, si detecta deriva, propone resetear la base de datos.
+- **Reintentos solo por conectividad.** Si Postgres aún no acepta conexiones (P1001,
+  P1002 o arrancando), reintenta hasta `MIGRATE_INTENTOS_MAX` veces (15) cada
+  `MIGRATE_ESPERA_SEGUNDOS` (2). Cualquier otro fallo de migración detiene el arranque
+  a la primera, para no esconder una migración rota.
+
+### Variables que espera el contenedor
+
+Ninguna va dentro de la imagen: se inyectan en runtime (`-e`, `--env-file` o compose).
+El `.env` está excluido del contexto de build por el [`.dockerignore`](.dockerignore).
+
+| Variable | Obligatoria | Valor en producción |
+|---|---|---|
+| `DATABASE_URL` | sí | `postgresql://usuario:password@host:5432/bd?schema=public`. Dentro de una red de Docker, `host` es el nombre del servicio de Postgres, no `localhost` |
+| `JWT_SECRET` | sí | Aleatorio, 32 caracteres o más |
+| `APP_URL` | sí en producción | URL pública del frontend, p. ej. `https://jeanrodas.lat` |
+| `TRUST_PROXY` | sí en producción | `1`: la app va detrás de nginx. Si se queda en `false`, el rate limiting vería la IP del proxy para todos |
+| `MAIL_FROM` | no | Remitente del correo |
+| `RESEND_API_KEY` | no | Sin ella el correo se omite y la confirmación funciona igual |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | solo para el seed | El servidor no las lee |
+| `NODE_ENV` | no | La imagen ya trae `production` |
+| `PORT` | no | La imagen ya trae `3000` |
+| `MIGRATE_INTENTOS_MAX` / `MIGRATE_ESPERA_SEGUNDOS` | no | Reintentos del entrypoint (15 y 2) |
+
 ## Seguridad: alcance y limitaciones
 
 ### Lo que está implementado
