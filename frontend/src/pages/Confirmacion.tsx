@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DatosCliente } from '../components/DatosCliente'
 import { Encabezado } from '../components/Encabezado'
 import { PanelSeleccion, type FiltroTipo } from '../components/PanelSeleccion'
@@ -29,6 +29,18 @@ export function Confirmacion({ onConfirmado }: Props) {
   const [errorApi, setErrorApi] = useState<unknown>(null)
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null)
   const [yaConfirmado, setYaConfirmado] = useState<{ mensaje: string; url: string | null } | null>(null)
+  const avisoRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * El aviso del 409 vive arriba del formulario, pero el botón de confirmar está
+   * abajo: sin esto, quien confirma desde el final de la página no ve la respuesta.
+   * El efecto depende de `yaConfirmado`, que solo cambia cuando llega un 409, así
+   * que el desplazamiento ocurre al aparecer el aviso y no en cada render.
+   */
+  useEffect(() => {
+    if (!yaConfirmado) return
+    avisoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [yaConfirmado])
 
   // El catálogo se pide una sola vez y se filtra en memoria: son 17 items y así
   // el buscador responde al instante, sin una petición por tecla.
@@ -113,6 +125,7 @@ export function Confirmacion({ onConfirmado }: Props) {
 
       {yaConfirmado && (
         <div
+          ref={avisoRef}
           className="mb-6 flex flex-wrap items-center gap-3.5 rounded-2xl border-[1.5px] border-[#f4d78a] bg-[#fff7e6] px-4 py-4"
           data-testid="aviso-ya-confirmado"
         >
