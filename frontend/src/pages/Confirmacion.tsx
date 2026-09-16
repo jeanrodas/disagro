@@ -172,15 +172,18 @@ export function Confirmacion() {
         </p>
       )}
 
+      {/* min-w-0 en las dos columnas: un item de grid trae min-width:auto, así que la
+          pista se dimensiona al min-content de su contenido y no al contenedor. Sin
+          esto la página desborda en horizontal a 375px. */}
       <div className="grid items-start gap-6 lg:grid-cols-2">
         {/* ① Datos del cliente */}
-        <section>
+        <section className="min-w-0">
           <PasoTitulo numero={1} titulo="Ingrese su información" />
           <DatosCliente datos={datos} errores={errores} emailValido={emailValido} onCambiar={cambiarDato} />
         </section>
 
         {/* ② Selección, bloqueada hasta que el email sea válido */}
-        <section>
+        <section className="min-w-0">
           <PasoTitulo numero={2} titulo="Seleccione servicios y productos" apagado={bloqueado} />
           <PanelSeleccion
             items={itemsFiltrados}
