@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, apiFetch } from '../lib/api'
+import { ApiError, apiFetch } from '../lib/api/http'
 import type { RespuestaItems } from '../types/api'
 
 type Estado =
