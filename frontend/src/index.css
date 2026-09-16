@@ -2,10 +2,31 @@
 
 /*
  * Tailwind 4 se configura desde el CSS: este bloque @theme reemplaza al antiguo
- * tailwind.config.js y genera utilidades como bg-disagro-verde o text-disagro-verde.
+ * tailwind.config.js. Los valores salen de la propuesta de diseño aprobada
+ * (dirección moderna y fresca): verde Disagro con acentos lima sobre fondo claro.
  */
 @theme {
-  --color-disagro-verde: #00843d;
-  --color-disagro-verde-oscuro: #00632e;
-  --color-disagro-arena: #f5f3ec;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-titulo: 'Sora', system-ui, sans-serif;
+
+  --color-disagro-verde: #179b44;
+  --color-disagro-verde-claro: #37c463;
+  --color-disagro-verde-oscuro: #0f7a34;
+  --color-disagro-lima: #8fbf3a;
+  --color-disagro-lima-claro: #b6d94f;
+  --color-disagro-lima-oscuro: #6a8f1f;
+
+  --color-disagro-tinta: #14261a;
+  --color-disagro-texto: #3f5346;
+  --color-disagro-suave: #5c6f60;
+  --color-disagro-tenue: #9db3a5;
+  --color-disagro-borde: #e2efe6;
+  --color-disagro-campo: #f3f8f4;
+  --color-disagro-fondo: #eef4ef;
+}
+
+@layer base {
+  body {
+    @apply bg-disagro-fondo font-sans text-disagro-tinta;
+  }
 }
