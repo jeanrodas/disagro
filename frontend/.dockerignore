@@ -1,0 +1,35 @@
+# Contexto de build del frontend.
+#
+# Lista de PERMITIDOS: se ignora todo y solo entra lo que el Dockerfile copia.
+# Un fichero nuevo que nadie recuerde añadir aquí (un .env.produccion, un volcado)
+# queda fuera por defecto. De paso el contexto no arrastra node_modules ni dist.
+*
+
+!package.json
+!package-lock.json
+!index.html
+!vite.config.ts
+!tsconfig.json
+!tsconfig.app.json
+!tsconfig.node.json
+!src
+!public
+!nginx
+
+# Dentro de lo permitido, lo que tampoco debe entrar. Van al final a propósito:
+# en .dockerignore gana la última regla que coincide, así que un "!.env" añadido
+# arriba por error no las anula.
+
+# Se generan dentro del contenedor
+**/node_modules
+**/dist
+
+# No forman parte del build de producción
+**/*.test.ts
+**/*.test.tsx
+
+# Variables locales: las VITE_* se INCRUSTAN en el bundle y cualquiera las ve.
+# Fuera del contexto, nada se cuela en la imagen por accidente.
+**/.env
+**/.env.*
+.git
