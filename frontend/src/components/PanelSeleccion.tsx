@@ -1,7 +1,7 @@
 import type { DescuentosPreview } from '../lib/descuentos-preview'
 import type { Item, TipoItem } from '../types/api'
+import { IncentivosDescuento } from './IncentivosDescuento'
 import { TarjetaItem } from './TarjetaItem'
-import { TarjetasDescuento } from './TarjetasDescuento'
 
 export type FiltroTipo = 'TODOS' | TipoItem
 
@@ -96,9 +96,9 @@ export function PanelSeleccion({
         ))}
       </div>
 
-      {/* Vista previa de descuentos */}
+      {/* Incentivo de descuento: cuánto lleva y cuánto le falta para el siguiente nivel */}
       <div style={{ opacity: bloqueado ? 0.5 : 1 }} className="transition-opacity">
-        <TarjetasDescuento descuentos={descuentos} />
+        <IncentivosDescuento descuentos={descuentos} />
       </div>
 
       {/* Bloqueo hasta que el email sea válido */}

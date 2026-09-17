@@ -151,21 +151,3 @@ export function progresoProductos({ cantidad, porcentaje }: ResumenPreview): Pro
     centavosFaltantes: 0,
   }
 }
-
-/** Texto de ayuda bajo cada tarjeta: qué falta para llegar al siguiente descuento. */
-export function notaServicios({ cantidad, sumaCentavos, porcentaje }: ResumenPreview): string {
-  if (cantidad === 0) return 'Elige 2 servicios para tu descuento'
-  if (cantidad < MINIMO_SERVICIOS) return `${cantidad} servicio · falta ${MINIMO_SERVICIOS - cantidad} para el 3%`
-  if (porcentaje === 3) {
-    const faltan = SUMA_SERVICIOS_MAYOR_A_CENTAVOS - sumaCentavos + 1
-    return `${cantidad} servicios · ${aMonto(faltan)} más para el 5%`
-  }
-  return `${cantidad} servicios · más de Q1,500`
-}
-
-export function notaProductos({ cantidad, porcentaje }: ResumenPreview): string {
-  if (cantidad === 0) return 'Elige 3 productos para tu descuento'
-  if (porcentaje === 0) return `${cantidad} producto(s) · faltan ${MINIMO_PRODUCTOS_TRES_POR_CIENTO - cantidad} para el 3%`
-  if (porcentaje === 3) return `${cantidad} productos · faltan ${MINIMO_PRODUCTOS_CINCO_POR_CIENTO - cantidad} para el 5%`
-  return `${cantidad} productos`
-}
