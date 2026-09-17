@@ -67,47 +67,81 @@ Están documentadas en [`.env.example`](.env.example). Las que cambian por entor
   se omite y queda anotado en el log; la confirmación funciona igual.
 - `ADMIN_USER` y `ADMIN_PASSWORD`: solo las usa el seed del admin.
 
-## Docker (backend)
+## Docker: toda la plataforma
 
-El [`Dockerfile`](Dockerfile) construye una imagen de producción en tres etapas:
-`deps` instala solo dependencias de producción, `build` compila TypeScript y la
-etapa final copia únicamente `dist/`, esas dependencias, el schema y las migraciones.
-Corre con un usuario sin privilegios (`app`) y trae un `HEALTHCHECK` contra `/health`.
+```bash
+cp .env.example .env          # y completa los valores
+docker compose up -d --build
+```
+
+La app queda en **http://localhost:8090** (cámbialo con `PUERTO_APP`).
+
+Cuatro servicios que arrancan en orden, garantizado por `depends_on`:
+
+| Servicio | Qué hace | Arranca cuando |
+|---|---|---|
+| `postgres` | Base de datos, con volumen persistente | — |
+| `migrate` | `prisma migrate deploy` y siembra el catálogo y el admin. **Termina** | `postgres` está *healthy* |
+| `backend` | La API. No migra | `migrate` terminó **con éxito** |
+| `frontend` | nginx: sirve la SPA y hace de proxy a `/api` | `backend` está *healthy* |
+
+Desde cero (`down -v` incluido) tarda unos 35 segundos.
+
+### Dos imágenes del backend, del mismo Dockerfile
+
+- `--target final` (por defecto): **el servidor**. 247 MB. No lleva el CLI de Prisma.
+- `--target migrate`: **las herramientas**. Lleva el CLI y `tsx` para el seed.
+
+Migrar es una tarea puntual de despliegue, no algo que el servidor deba saber hacer.
+Separarlas quita del runtime el CLI y todo lo que arrastra (Prisma Studio con
+`react-dom`, `effect`, `typescript`), que el servidor no usa nunca: de 486 MB a 247 MB.
+Además, con varias réplicas del backend, todas intentarían migrar a la vez.
+
+**`migrate deploy`, no `migrate dev`:** `deploy` aplica las migraciones ya versionadas,
+sin crear nuevas ni preguntar nada, y no hace nada si ya están aplicadas. `dev` es
+interactivo, puede generar migraciones y, si detecta deriva, propone **resetear** la base.
+El seed usa `upsert`, así que repetir `up` no duplica el catálogo.
+
+### Comandos
+
+| Comando | Qué hace |
+|---|---|
+| `docker compose up -d --build` | Levanta la plataforma |
+| `docker compose logs -f` | Sigue los logs |
+| `docker compose down` | La para y **conserva** los datos |
+| `docker compose down -v` | La para y **BORRA la base de datos** |
+| `npm run db:up` | Solo Postgres, para desarrollar sin Docker |
+
+### Variables
+
+El `.env` de la raíz sirve a dos entornos, y por eso hay variables con sufijo `_DOCKER`:
+en desarrollo la base está en `localhost:5434` y la app en el 5175 de Vite, mientras que
+dentro de la red de Docker la base es el servicio `postgres:5432` y la app la sirve nginx.
+
+| Variable | Para qué |
+|---|---|
+| `PUERTO_APP` | Puerto del host donde queda la app (por defecto 8090) |
+| `DATABASE_URL_DOCKER` | Conexión de los contenedores: host `postgres`, puerto 5432 |
+| `APP_URL_DOCKER` | URL pública de la app. En producción, el dominio real |
+| `JWT_SECRET`, `ADMIN_USER`, `ADMIN_PASSWORD`, `MAIL_FROM`, `RESEND_API_KEY` | Compartidas con el desarrollo |
+
+`TRUST_PROXY` no se define en el `.env` para los contenedores: el compose lo fija en `1`,
+porque el backend siempre va detrás de nginx.
+
+### Ejecutar solo el backend, sin compose
 
 ```bash
 docker build -t disagro-backend .
-docker run -d --name disagro-backend -p 127.0.0.1:3000:3000 --env-file backend.env disagro-backend
+docker run -d -p 127.0.0.1:3000:3000 --env-file backend.env disagro-backend
 ```
 
-Al arrancar, [`docker-entrypoint.sh`](docker-entrypoint.sh) aplica las migraciones y
-después levanta el servidor:
+Esta imagen **no migra**: espera a que la base acepte conexiones y arranca el servidor.
+Prepara la base antes con la imagen de herramientas:
 
-- **`prisma migrate deploy`, no `migrate dev`.** `deploy` aplica las migraciones ya
-  versionadas en `prisma/migrations`, sin crear nuevas ni pedir confirmación, y no hace
-  nada si ya están aplicadas: es seguro repetirlo en cada arranque. `dev` puede generar
-  migraciones, es interactivo y, si detecta deriva, propone resetear la base de datos.
-- **Reintentos solo por conectividad.** Si Postgres aún no acepta conexiones (P1001,
-  P1002 o arrancando), reintenta hasta `MIGRATE_INTENTOS_MAX` veces (15) cada
-  `MIGRATE_ESPERA_SEGUNDOS` (2). Cualquier otro fallo de migración detiene el arranque
-  a la primera, para no esconder una migración rota.
-
-### Variables que espera el contenedor
-
-Ninguna va dentro de la imagen: se inyectan en runtime (`-e`, `--env-file` o compose).
-El `.env` está excluido del contexto de build por el [`.dockerignore`](.dockerignore).
-
-| Variable | Obligatoria | Valor en producción |
-|---|---|---|
-| `DATABASE_URL` | sí | `postgresql://usuario:password@host:5432/bd?schema=public`. Dentro de una red de Docker, `host` es el nombre del servicio de Postgres, no `localhost` |
-| `JWT_SECRET` | sí | Aleatorio, 32 caracteres o más |
-| `APP_URL` | sí en producción | URL pública del frontend, p. ej. `https://jeanrodas.lat` |
-| `TRUST_PROXY` | sí en producción | `1`: la app va detrás de nginx. Si se queda en `false`, el rate limiting vería la IP del proxy para todos |
-| `MAIL_FROM` | no | Remitente del correo |
-| `RESEND_API_KEY` | no | Sin ella el correo se omite y la confirmación funciona igual |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | solo para el seed | El servidor no las lee |
-| `NODE_ENV` | no | La imagen ya trae `production` |
-| `PORT` | no | La imagen ya trae `3000` |
-| `MIGRATE_INTENTOS_MAX` / `MIGRATE_ESPERA_SEGUNDOS` | no | Reintentos del entrypoint (15 y 2) |
+```bash
+docker build --target migrate -t disagro-migrate .
+docker run --rm --env-file backend.env disagro-migrate
+```
 
 ## Seguridad: alcance y limitaciones
 
