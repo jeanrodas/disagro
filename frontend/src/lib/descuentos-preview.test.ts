@@ -3,8 +3,11 @@ import {
   aCentavos,
   aMonto,
   calcularDescuentosPreview,
+  nivelDe,
   porcentajeProductos,
   porcentajeServicios,
+  progresoProductos,
+  progresoServicios,
   type ItemPreview,
 } from './descuentos-preview'
 
@@ -134,5 +137,69 @@ describe('servicios y productos son independientes', () => {
     ])
     expect(resultado.servicios.porcentaje).toBe(5)
     expect(resultado.productos.porcentaje).toBe(0)
+  })
+})
+
+describe('nivel (lectura del porcentaje, no una regla nueva)', () => {
+  it.each([
+    [0, 0],
+    [3, 1],
+    [5, 2],
+  ] as const)('%i%% => nivel %i', (porcentaje, esperado) => {
+    expect(nivelDe(porcentaje)).toBe(esperado)
+  })
+})
+
+describe('progreso de SERVICIOS hacia el siguiente nivel', () => {
+  const resumen = (items: ItemPreview[]) => calcularDescuentosPreview(items).servicios
+
+  it('sin servicios: faltan los 2 del umbral', () => {
+    expect(progresoServicios(resumen([]))).toMatchObject({ nivel: 0, itemsFaltantes: 2, centavosFaltantes: 0 })
+  })
+
+  it('con 1 servicio: falta 1, por caro que sea', () => {
+    expect(progresoServicios(resumen([servicio('9999.00')]))).toMatchObject({ nivel: 0, itemsFaltantes: 1 })
+  })
+
+  it('en el nivel 1 lo que falta es SUMA, no cantidad', () => {
+    const progreso = progresoServicios(resumen([servicio('750.00'), servicio('680.00')]))
+    expect(progreso).toMatchObject({ nivel: 1, itemsFaltantes: 0 })
+    // Q1,430.00 de suma: faltan Q70.00 para llegar a Q1,500 y un centavo más para superarlo
+    expect(progreso.centavosFaltantes).toBe(7001)
+    expect(aMonto(progreso.centavosFaltantes)).toBe('70.01')
+  })
+
+  it('frontera: con la suma EXACTA en Q1,500.00 todavía falta un centavo', () => {
+    const progreso = progresoServicios(resumen([servicio('750.00'), servicio('750.00')]))
+    expect(progreso.nivel).toBe(1)
+    expect(progreso.centavosFaltantes).toBe(1)
+  })
+
+  it('en el máximo no falta nada', () => {
+    expect(progresoServicios(resumen([servicio('850.00'), servicio('950.00')]))).toMatchObject({
+      nivel: 2,
+      itemsFaltantes: 0,
+      centavosFaltantes: 0,
+    })
+  })
+})
+
+describe('progreso de PRODUCTOS hacia el siguiente nivel', () => {
+  const resumen = (cantidad: number) => calcularDescuentosPreview(nProductos(cantidad)).productos
+
+  it.each([
+    [0, 0, 3],
+    [1, 0, 2],
+    [2, 0, 1],
+    [3, 1, 2],
+    [4, 1, 1],
+    [5, 2, 0],
+    [9, 2, 0],
+  ])('%i productos => nivel %i, faltan %i', (cantidad, nivel, faltan) => {
+    expect(progresoProductos(resumen(cantidad))).toMatchObject({ nivel, itemsFaltantes: faltan })
+  })
+
+  it('a los productos nunca les falta dinero, solo cantidad', () => {
+    expect(progresoProductos(resumen(2)).centavosFaltantes).toBe(0)
   })
 })
