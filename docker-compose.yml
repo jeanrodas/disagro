@@ -1,28 +1,128 @@
-# Servicios de infraestructura para desarrollo.
-# Por ahora solo Postgres; el backend se dockeriza en una fase posterior.
-# Las credenciales se leen del archivo .env (docker compose lo carga automáticamente).
+# Plataforma completa de la Feria de Promociones Disagro.
+#
+#   docker compose up -d --build      levanta todo
+#   docker compose down               lo para (conserva los datos)
+#   docker compose down -v            lo para Y BORRA LA BASE DE DATOS
+#
+# La app queda en http://localhost:8090 (o el PUERTO_APP que definas).
+#
+# Orden de arranque, garantizado por depends_on:
+#   postgres (healthy) -> migrate (termina bien) -> backend (healthy) -> frontend
+#
+# Desarrollo sin Docker: `npm run db:up` levanta SOLO postgres, publicado en el
+# puerto 5434 del host, y el backend y Vite siguen ejecutándose fuera de Docker
+# como siempre.
+name: disagro
+
+# Entorno común del backend y del servicio de migraciones: ambos hablan con la
+# misma base y comparten la validación de variables de src/config/env.ts.
+#
+# Las variables terminadas en _DOCKER existen porque el .env de la raíz sirve a
+# DOS entornos: el desarrollo en el host (DATABASE_URL apunta a localhost:5434 y
+# APP_URL al 5175 de Vite) y estos contenedores (la base es el servicio
+# `postgres` en el puerto interno 5432, y la app se sirve por nginx). Mezclarlas
+# haría que el contenedor buscase la base en su propio localhost.
+x-entorno-backend: &entorno-backend
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL_DOCKER:?Define DATABASE_URL_DOCKER en .env (host `postgres`, puerto 5432)}
+  JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env}
+  APP_URL: ${APP_URL_DOCKER:-http://localhost:8090}
+  # 1 = hay un proxy delante (nginx). Con `false`, el rate limiting vería la IP
+  # de nginx para todo el mundo y bastaría un abusón para bloquear a los demás.
+  TRUST_PROXY: 1
+  MAIL_FROM: ${MAIL_FROM:-Feria Disagro <onboarding@resend.dev>}
+  # Sin clave, el correo se omite y la confirmación funciona igual
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
 
 services:
+  # ---------------------------------------------------------------------------
+  # Base de datos
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:17-alpine
-    container_name: disagro-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?Define POSTGRES_USER en .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: ${POSTGRES_DB:?Define POSTGRES_DB en .env}
     ports:
-      # Solo en localhost: la BD no queda expuesta a la red local
+      # Solo en localhost: la base no queda expuesta a la red local. Este puerto
+      # es para el desarrollo desde el host (Prisma Studio, psql, el backend sin
+      # Docker); los contenedores se hablan por la red interna, en el 5432.
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
+      # De esto depende todo lo demás: hasta que no responda, migrate no arranca
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
+  # ---------------------------------------------------------------------------
+  # Migraciones y seed (efímero: corre, termina y desaparece)
+  # ---------------------------------------------------------------------------
+  # Es el ÚNICO servicio con el CLI de Prisma y tsx. El backend de runtime no los
+  # lleva: así la imagen que queda corriendo es más ligera y no arrastra las
+  # dependencias del CLI (Prisma Studio incluido) que el servidor no usa.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: disagro-migrate:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *entorno-backend
+      # Solo las usa el seed del admin; el servidor arranca sin ellas
+      ADMIN_USER: ${ADMIN_USER:?Define ADMIN_USER en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
+    # Es de un solo uso: si falla, que se vea, no que reintente en bucle
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      target: final
+    image: disagro-backend:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Arranca solo si migrate terminó CON ÉXITO: nunca contra una base a medio
+      # preparar
+      migrate:
+        condition: service_completed_successfully
+    environment: *entorno-backend
+    restart: unless-stopped
+    # Sin `ports`: la API no se publica en el host. Se llega a ella por nginx, en
+    # /api, que es el mismo origen que usa el navegador.
+
+  # ---------------------------------------------------------------------------
+  # Frontend (nginx sirve la SPA y hace de proxy hacia la API)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+    image: disagro-frontend:local
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Nombre del servicio dentro de la red de compose, no localhost
+      BACKEND_HOST: backend
+      BACKEND_PORT: 3000
+    ports:
+      - "127.0.0.1:${PUERTO_APP:-8090}:80"
+    restart: unless-stopped
+
 volumes:
+  # Sin `name:` fijo: compose lo llama <proyecto>_postgres_data, que con el
+  # proyecto `disagro` da exactamente el volumen que ya existe. Además permite
+  # levantar la pila en otro proyecto (docker compose -p otro ...) con su propia
+  # base, sin tocar la de desarrollo.
   postgres_data:
-    name: disagro_postgres_data
