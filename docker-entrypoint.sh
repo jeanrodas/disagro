@@ -1,60 +1,55 @@
 #!/bin/sh
-# Arranque del backend en el contenedor: primero migraciones, después el servidor.
+# Arranque del backend en el contenedor.
 #
-# ¿Por qué `prisma migrate deploy` y no `prisma migrate dev`?
-#   - deploy aplica, en orden, las migraciones YA creadas y versionadas en
-#     prisma/migrations. No genera migraciones nuevas, no pregunta nada y no
-#     modifica el esquema por su cuenta. Si ya están todas aplicadas no hace nada,
-#     así que es seguro ejecutarlo en cada arranque.
-#   - dev es una herramienta de desarrollo: compara el schema con la base de datos,
-#     puede CREAR migraciones nuevas, pide confirmación interactiva y, si detecta
-#     deriva entre ambos, propone RESETEAR la base de datos (borrando los datos).
-#     En producción eso es inaceptable, y en un contenedor sin terminal ni siquiera
-#     habría nadie para responder.
+# Ya NO aplica migraciones: de eso se encarga el servicio efímero `migrate` del
+# compose, que es el único que lleva el CLI de Prisma. Separarlo tiene dos
+# motivos: la imagen que queda corriendo no carga con herramientas que no usa, y
+# migrar deja de ser algo que ocurre en cada arranque de cada réplica (con dos
+# contenedores del backend, ambos intentarían migrar a la vez).
 #
-# Reintentos: el contenedor puede arrancar antes de que Postgres acepte conexiones
-# (depends_on de compose, por defecto, solo espera a que el contenedor EXISTA, no a
-# que esté listo). Se reintenta SOLO si el fallo es de conectividad; una migración
-# rota falla a la primera, en vez de quedar enmascarada tras varios reintentos.
+# Lo único que hace aquí es esperar a que la base acepte conexiones. En el compose
+# el orden ya está garantizado (depends_on), pero esta imagen también se ejecuta
+# suelta, y así no se arranca contra una base que todavía no está.
 set -eu
 
-INTENTOS_MAX="${MIGRATE_INTENTOS_MAX:-15}"
-ESPERA_SEGUNDOS="${MIGRATE_ESPERA_SEGUNDOS:-2}"
+INTENTOS_MAX="${BD_INTENTOS_MAX:-15}"
+ESPERA_SEGUNDOS="${BD_ESPERA_SEGUNDOS:-2}"
 
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "[entrypoint] DATABASE_URL no está definida. Se inyecta en runtime (docker run -e, --env-file o compose)." >&2
   exit 1
 fi
 
-intento=1
-while :; do
-  echo "[entrypoint] prisma migrate deploy (intento ${intento}/${INTENTOS_MAX})"
+# Comprobación TCP simple: no consulta nada, solo mira si el puerto acepta
+# conexiones. No necesita el CLI de Prisma ni ninguna dependencia extra.
+puerto_abierto() {
+  node -e '
+    const { hostname, port } = new URL(process.env.DATABASE_URL);
+    const socket = require("net").connect({ host: hostname, port: Number(port) || 5432 });
+    socket.setTimeout(2000);
+    socket.on("connect", () => { socket.end(); process.exit(0); });
+    socket.on("error", () => process.exit(1));
+    socket.on("timeout", () => { socket.destroy(); process.exit(1); });
+  '
+}
 
-  if salida="$(./node_modules/.bin/prisma migrate deploy 2>&1)"; then
-    echo "$salida"
+intento=1
+while [ "$intento" -le "$INTENTOS_MAX" ]; do
+  if puerto_abierto; then
     break
   fi
-  echo "$salida" >&2
-
-  # P1001: servidor inalcanzable (o host que aún no resuelve)
-  # P1002: tiempo de conexión agotado
-  # 57P03 / "starting up": Postgres existe pero todavía está inicializando
-  if ! echo "$salida" | grep -qE 'P1001|P1002|57P03|starting up'; then
-    echo "[entrypoint] La migración falló por un motivo que NO es de conectividad: no se reintenta." >&2
-    exit 1
-  fi
-
-  if [ "$intento" -ge "$INTENTOS_MAX" ]; then
-    echo "[entrypoint] La base de datos no respondió tras ${INTENTOS_MAX} intentos: el servidor no arranca." >&2
-    exit 1
-  fi
-
-  echo "[entrypoint] La base de datos aún no responde; reintento en ${ESPERA_SEGUNDOS}s..."
+  echo "[entrypoint] La base de datos aún no acepta conexiones (intento ${intento}/${INTENTOS_MAX}); reintento en ${ESPERA_SEGUNDOS}s..."
   intento=$((intento + 1))
   sleep "$ESPERA_SEGUNDOS"
 done
 
-echo "[entrypoint] Migraciones al día; arrancando el servidor"
+if [ "$intento" -gt "$INTENTOS_MAX" ]; then
+  # Se arranca igual, a propósito: el servidor responde y /health informa de que
+  # la base está caída, que es más útil que un contenedor que no levanta.
+  echo "[entrypoint] La base de datos no respondió tras ${INTENTOS_MAX} intentos. Se arranca igual: /health lo reportará." >&2
+fi
+
+echo "[entrypoint] Arrancando el servidor"
 
 # exec: node REEMPLAZA al shell como proceso principal. Así recibe directamente el
 # SIGTERM de `docker stop`, que server.ts usa para cerrar de forma ordenada. Sin
