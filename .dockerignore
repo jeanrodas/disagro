@@ -14,6 +14,7 @@
 !src
 !prisma
 !docker-entrypoint.sh
+!docker-entrypoint-migrate.sh
 
 # Dentro de lo permitido, lo que tampoco debe entrar.
 # Van al final a propósito: en .dockerignore gana la última regla que coincide,
@@ -26,7 +27,6 @@ src/generated
 
 # No forman parte de la imagen de producción
 **/*.test.ts
-prisma/seed
 
 # Secretos y repositorio: nunca dentro de una imagen.
 # Las variables se inyectan en runtime (docker run -e / --env-file / compose).
