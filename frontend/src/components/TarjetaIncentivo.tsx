@@ -92,8 +92,15 @@ export function TarjetaIncentivo({ tipo, nivel, porcentaje, relleno, nudge, cele
         </span>
       )}
 
+      {/*
+        En el máximo, la etiqueta cede el sitio al sello: se le reserva el hueco (pr-20)
+        y se le permite partir en dos líneas. El handoff la fija en una sola línea, pero
+        eso vale para su lienzo ancho; en la columna del formulario la tarjeta mide ~213px
+        y el sello rotado ocupa casi todo el ancho superior, así que en una línea el texto
+        acababa por debajo del sello.
+      */}
       <div
-        className="text-[11px] font-bold tracking-[0.06em] whitespace-nowrap uppercase"
+        className={`text-[11px] font-bold tracking-[0.06em] uppercase ${enElMaximo ? 'pr-20' : 'whitespace-nowrap'}`}
         style={{ color: paleta.etiqueta }}
       >
         Descuento {tipo}

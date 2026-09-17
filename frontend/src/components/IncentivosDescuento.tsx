@@ -101,10 +101,16 @@ export function IncentivosDescuento({ descuentos }: Props) {
   const celebrarServicios = useCelebracion(servicios.nivel)
   const celebrarProductos = useCelebracion(productos.nivel)
 
+  // Dos columnas desde `sm`, una en móvil.
+  //
+  // El handoff usaba auto-fit con minmax(280px, 1fr), pero aquí el contenedor es la
+  // columna de selección del formulario, que en escritorio mide ~472px: dos columnas
+  // de 280px más el gap piden 578px, así que auto-fit colapsaba a una sola y las
+  // tarjetas quedaban enormes y la segunda fuera de vista. Con el breakpoint, cada
+  // tarjeta ocupa ~227px en escritorio y la fila entra completa.
   return (
     <div
-      className="grid gap-[18px] bg-disagro-campo px-3.5 py-4"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}
+      className="grid grid-cols-1 gap-3 bg-disagro-campo px-3.5 py-4 sm:grid-cols-2 sm:gap-[18px]"
       data-testid="incentivos-descuento"
     >
       <TarjetaIncentivo
