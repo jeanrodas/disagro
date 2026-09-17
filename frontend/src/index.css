@@ -25,8 +25,87 @@
   --color-disagro-fondo: #eef4ef;
 }
 
+/*
+ * Animaciones del incentivo de descuento (dirección de diseño 2A). Los keyframes
+ * son los del handoff, tal cual. Declararlos dentro de @theme hace que Tailwind
+ * genere las utilidades animate-* y solo incluya los keyframes que se usan.
+ */
+@theme {
+  --animate-pop: pop 0.55s ease;
+  --animate-brillo: brillo 0.9s ease;
+  --animate-subir: subir 0.5s ease;
+  --animate-sello: sello 0.5s ease both;
+
+  @keyframes pop {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(1.28);
+    }
+    70% {
+      transform: scale(0.94);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes brillo {
+    0% {
+      box-shadow: 0 0 0 0 rgba(55, 196, 99, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 16px rgba(55, 196, 99, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(55, 196, 99, 0);
+    }
+  }
+
+  @keyframes subir {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes sello {
+    0% {
+      opacity: 0;
+      transform: scale(2) rotate(-18deg);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(0.9) rotate(-12deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(-12deg);
+    }
+  }
+}
+
 @layer base {
   body {
     @apply bg-disagro-fondo font-sans text-disagro-tinta;
+  }
+
+  /*
+   * Quien pide menos movimiento no ve los efectos fuertes —el rebote del
+   * porcentaje, el pulso de brillo y el sello girando—, pero sí conserva las
+   * transiciones suaves de color y del ancho de la barra: el estado sigue
+   * leyéndose igual, sin sacudidas.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-pop,
+    .animate-brillo,
+    .animate-sello {
+      animation: none !important;
+    }
   }
 }
