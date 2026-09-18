@@ -1,0 +1,141 @@
+# Plataforma completa en PRODUCCIÓN (VPS, https://jeanrodas.lat).
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --build
+#   docker compose -f docker-compose.prod.yml --env-file .env.produccion logs -f
+#
+# Diferencias con docker-compose.yml (desarrollo), que NO cambia:
+#   - Caddy delante de todo: termina el TLS y es el ÚNICO que publica puertos.
+#   - nginx (frontend) ya no publica puerto en el host: solo lo alcanza Caddy por la
+#     red interna de Docker.
+#   - Postgres tampoco publica: se entra con `docker compose exec postgres psql`.
+#   - TRUST_PROXY=2, porque ahora delante del backend hay DOS proxies.
+#
+# Es un fichero autónomo y no un `extends` del de desarrollo a propósito: extends no
+# permite QUITAR los `ports` heredados, y no publicar nada salvo Caddy es justo el
+# objetivo de esta configuración.
+#
+# El proyecto se llama distinto (disagro-prod), así que sus volúmenes y contenedores
+# no se cruzan con los de desarrollo aunque convivan en la misma máquina.
+name: disagro-prod
+
+x-entorno-backend: &entorno-backend
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL_DOCKER:?Define DATABASE_URL_DOCKER en .env.produccion (host `postgres`, puerto 5432)}
+  JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env.produccion (aleatorio, 32+ caracteres)}
+  APP_URL: ${APP_URL_DOCKER:?Define APP_URL_DOCKER=https://jeanrodas.lat en .env.produccion}
+  # 2 = Caddy + nginx. Cada uno añade su salto a X-Forwarded-For; el backend confía
+  # en esos dos y toma la IP real del cliente. Con 1 tomaría la de Caddy y con 0/false
+  # la de nginx: en ambos casos el rate limiting por IP contaría a todos como uno.
+  # Va fijo aquí, y no en el .env, porque depende de esta topología y no del entorno.
+  TRUST_PROXY: 2
+  MAIL_FROM: ${MAIL_FROM:-Feria Disagro <onboarding@resend.dev>}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+services:
+  # ---------------------------------------------------------------------------
+  # Base de datos (sin puertos publicados)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Define POSTGRES_USER en .env.produccion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env.produccion}
+      POSTGRES_DB: ${POSTGRES_DB:?Define POSTGRES_DB en .env.produccion}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Migraciones y seed (efímero: corre, termina y desaparece)
+  # ---------------------------------------------------------------------------
+  # Aquí se aplica la contraseña del admin: el seed es idempotente y actualiza el
+  # hash si ADMIN_PASSWORD cambió en el .env de producción.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: disagro-migrate:prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *entorno-backend
+      ADMIN_USER: ${ADMIN_USER:?Define ADMIN_USER en .env.produccion}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env.produccion}
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # API (solo accesible desde la red interna)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      target: final
+    image: disagro-backend:prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment: *entorno-backend
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # nginx: SPA y proxy a /api. Sin puertos: solo lo alcanza Caddy
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+    image: disagro-frontend:prod
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: 3000
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Caddy: HTTPS automático y única puerta al exterior
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      DOMINIO: ${DOMINIO:?Define DOMINIO en .env.produccion (jeanrodas.lat)}
+      CADDY_EMAIL: ${CADDY_EMAIL:?Define CADDY_EMAIL en .env.produccion (correo para Let's Encrypt)}
+    ports:
+      # En producción se dejan 80 y 443. Son variables solo para poder levantar esta
+      # misma configuración en una máquina donde esos puertos ya estén ocupados.
+      - "${PUERTO_HTTP:-80}:80"
+      - "${PUERTO_HTTPS:-443}:443"
+      # HTTP/3
+      - "${PUERTO_HTTPS:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados viven en un volumen: si se perdieran en cada reinicio, Caddy
+      # pediría uno nuevo cada vez y Let's Encrypt acabaría cortando por límite de
+      # peticiones (5 por dominio y semana).
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      # La API de administración de Caddy, que solo escucha dentro del contenedor
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
