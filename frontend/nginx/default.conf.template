@@ -1,5 +1,17 @@
 # Frontend de la Feria Disagro servido por nginx.
 #
+# X-Forwarded-Proto: si la petición ya trae uno (hay un proxy delante que terminó el
+# TLS, como Caddy en producción), se respeta; si no trae, se usa el esquema de esta
+# conexión. Poner siempre $scheme borraría el "https" de Caddy, porque el salto
+# Caddy→nginx es HTTP dentro de la red de Docker, y el backend creería que la
+# petición llegó en claro.
+#
+# El `map` va en el contexto http, es decir fuera del bloque server.
+map $http_x_forwarded_proto $esquema_de_origen {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+#
 # Es una PLANTILLA. Al arrancar el contenedor, el entrypoint oficial de nginx la
 # procesa con envsubst y escribe el resultado en /etc/nginx/conf.d/default.conf.
 # envsubst solo sustituye variables de entorno DEFINIDAS (BACKEND_HOST,
@@ -56,8 +68,8 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Real-IP $remote_addr;
 
-        # Esquema con el que llegó la petición a nginx (http o https)
-        proxy_set_header X-Forwarded-Proto $scheme;
+        # Esquema con el que se pidió ORIGINALMENTE (ver el map de arriba)
+        proxy_set_header X-Forwarded-Proto $esquema_de_origen;
 
         proxy_connect_timeout 5s;
         proxy_read_timeout 30s;
