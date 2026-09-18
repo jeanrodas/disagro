@@ -1,0 +1,42 @@
+# Caddy: puerta de entrada pública y terminador TLS.
+#
+# Cadena completa:  internet → Caddy (443, HTTPS) → nginx (80, red interna) → backend
+#
+# Caddy saca y renueva el certificado de Let's Encrypt solo, y redirige HTTP a HTTPS
+# sin que haya que configurarlo. Por eso el nginx que ya teníamos se queda como está:
+# sirve la SPA y proxea /api, y deja de estar expuesto al exterior.
+
+{
+	# Correo para Let's Encrypt (avisos de expiración y recuperación de cuenta).
+	# Llega por variable: en el repo NUNCA va un correo real. Se define en el
+	# .env de producción, que no se versiona.
+	email {$CADDY_EMAIL}
+}
+
+# El dominio también llega por variable, y así el mismo fichero sirve para:
+#   producción     DOMINIO=jeanrodas.lat  → certificado de Let's Encrypt
+#   prueba local   DOMINIO=localhost      → Caddy usa su CA interno (tls internal
+#                                            automático para localhost y *.localhost),
+#                                            sin dominio ni puertos públicos
+{$DOMINIO} {
+	encode zstd gzip
+
+	# nginx sirve la SPA y ya se encarga de /api → backend.
+	#
+	# reverse_proxy añade por su cuenta X-Forwarded-For (la IP real del cliente),
+	# X-Forwarded-Proto (https) y X-Forwarded-Host. nginx las propaga y el backend,
+	# con TRUST_PROXY=2 (Caddy + nginx), lee la IP real del cliente. Sin esos dos
+	# saltos contados, el rate limiting vería a todo el mundo con la IP de nginx.
+	reverse_proxy frontend:80
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# www → sin www, con redirección permanente. Caddy saca certificado para los dos
+# nombres. Si el dominio no tiene el registro DNS de www, basta con borrar este bloque.
+www.{$DOMINIO} {
+	redir https://{$DOMINIO}{uri} permanent
+}
