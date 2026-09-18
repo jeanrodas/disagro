@@ -143,6 +143,40 @@ docker build --target migrate -t disagro-migrate .
 docker run --rm --env-file backend.env disagro-migrate
 ```
 
+### Producción: VPS con HTTPS (Caddy)
+
+[`docker-compose.prod.yml`](docker-compose.prod.yml) añade un quinto servicio, **Caddy**,
+que termina el TLS y es el único que publica puertos:
+
+```
+internet → Caddy (80/443, HTTPS) → nginx (80, red interna) → backend → postgres
+```
+
+```bash
+# en el VPS, con el .env de producción copiado por un canal seguro
+docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --build
+```
+
+- **HTTPS automático.** Caddy pide y renueva el certificado de Let's Encrypt y redirige
+  HTTP a HTTPS sin configurarlo. Los certificados viven en un volumen: si se perdieran
+  en cada reinicio, Let's Encrypt acabaría cortando por límite de peticiones.
+- **Nada más queda expuesto.** nginx y Postgres pierden sus `ports`: solo se llega a
+  ellos por la red interna de Docker.
+- **`TRUST_PROXY=2`**, fijado en el propio compose. Con dos proxies delante (Caddy y
+  nginx), el backend tiene que descontar dos saltos de `X-Forwarded-For` para leer la IP
+  real del cliente. Con `1` leería la de Caddy y el rate limiting por IP contaría a todo
+  el mundo como un solo visitante.
+- **El `.env` de producción es otro fichero** (`.env.produccion`, tampoco versionado) con
+  secretos propios: contraseña de Postgres, `JWT_SECRET` y `ADMIN_PASSWORD` nuevos, nunca
+  los de desarrollo. Las variables están documentadas en [`.env.example`](.env.example).
+- **La contraseña del admin se aplica al levantar.** El seed es idempotente: si
+  `ADMIN_PASSWORD` cambió, actualiza el hash en el primer `up`. Rotarla es editar esa
+  línea y volver a levantar.
+- **Probar sin dominio.** Con `DOMINIO=localhost`, Caddy usa su CA interno (certificado
+  autofirmado, sin Let's Encrypt) y la cadena completa se puede levantar en local:
+  `DOMINIO=localhost PUERTO_HTTP=8080 PUERTO_HTTPS=8443 docker compose -f docker-compose.prod.yml …`
+  y luego `curl -k https://localhost:8443/api/items`.
+
 ## Seguridad: alcance y limitaciones
 
 ### Lo que está implementado
