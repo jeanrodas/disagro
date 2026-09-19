@@ -131,21 +131,22 @@ Todo lo que sigue documenta el backend, que es la raíz de este repositorio.
 
 Node.js · TypeScript · Express 5 · PostgreSQL · Prisma 7 · JWT · bcrypt · Resend · Docker
 
-## Requisitos
+## Desarrollo sin Docker
 
-- Node.js 22 o superior
-- Docker (para la base de datos)
-
-## Puesta en marcha
+Para trabajar en el código con recarga automática. Requisitos: Node.js 22 o superior y
+Docker, solo para la base de datos.
 
 ```bash
-cp .env.example .env     # y completa los valores
+cp .env.example .env     # funciona tal cual en local
 npm install
-npm run db:up            # Postgres en Docker
+npm run db:up            # solo Postgres, publicado en localhost:5434
 npm run db:deploy        # aplica las migraciones
 npm run db:seed          # catálogo (17 items), admin inicial y 6 clientes de demostración
-npm run dev              # http://localhost:3000
+npm run dev              # API en http://localhost:3000
 ```
+
+Y el frontend, en otra terminal: `cd frontend && npm install && npm run dev`
+(http://localhost:5175; ver [`frontend/README.md`](frontend/README.md)).
 
 ## Scripts
 
@@ -153,12 +154,14 @@ npm run dev              # http://localhost:3000
 |---|---|
 | `npm run dev` | Servidor con recarga automática |
 | `npm run build` / `npm start` | Compila a `dist/` y lo ejecuta |
-| `npm test` | Tests unitarios con vitest |
+| `npm test` / `test:watch` | Tests con vitest (ver [Tests](#tests)) |
 | `npm run typecheck` | Revisa tipos sin compilar |
-| `npm run db:up` / `db:stop` | Postgres en Docker |
+| `npm run db:up` / `db:stop` | Solo Postgres en Docker, para desarrollar sin Docker |
 | `npm run db:migrate` / `db:deploy` | Migraciones en desarrollo / producción |
-| `npm run db:seed` / `db:seed:admin` | Catálogo y admin / solo admin |
+| `npm run db:generate` | Regenera el cliente de Prisma |
+| `npm run db:seed` / `db:seed:admin` | Catálogo, admin y clientes de demo / solo el admin |
 | `npm run db:studio` | Explorador de la base de datos |
+| `npm run docker:up` / `docker:down` / `docker:logs` | Atajos de `docker compose up -d --build`, `down` y `logs -f` |
 
 ## Endpoints
 
@@ -173,35 +176,45 @@ npm run dev              # http://localhost:3000
 | `POST /api/codigos/canjear` | público | Marca un código como canjeado (una sola vez) |
 | `POST /api/admin/login` / `logout` | público | Inicia y cierra la sesión del admin |
 | `GET /api/admin/me` | admin | Admin autenticado |
-| `GET /api/admin/clientes` | admin | Lista paginada con búsqueda |
+| `GET /api/admin/clientes` | admin | Lista paginada con búsqueda; cada cliente trae sus códigos canjeados y el total |
 | `GET /api/admin/clientes/:id` | admin | Detalle completo de un cliente |
 | `GET /api/admin/metricas` | admin | Totales, ingreso potencial y top de items |
 
 ## Variables de entorno
 
-Están documentadas en [`.env.example`](.env.example). Las que cambian por entorno:
+Las de local están en [`.env.example`](.env.example), que funciona tal cual, y las de
+producción en [`.env.produccion.example`](.env.produccion.example). Las que cambian por
+entorno:
 
 - `APP_URL`: URL pública del frontend (CORS, enlace del correo, `portafolioUrl` del 409).
-- `TRUST_PROXY`: cuántos proxies hay delante. `false` en local, `1` en producción.
+- `TRUST_PROXY`: cuántos proxies hay delante del backend. De eso depende qué IP ve el
+  rate limiting, y el valor correcto depende de dónde corre (tabla de abajo).
 - `MAIL_FROM` y `RESEND_API_KEY`: remitente y clave del correo. Sin clave, el correo
   se omite y queda anotado en el log; la confirmación funciona igual.
 - `ADMIN_USER` y `ADMIN_PASSWORD`: solo las usa el seed del admin.
 
+| Dónde corre el backend | Proxies delante | `TRUST_PROXY` | Quién lo fija |
+|---|---|---|---|
+| `npm run dev` (sin Docker) | ninguno | `false` | el `.env` |
+| `docker-compose.yml` (desarrollo) | nginx | `1` | el propio compose |
+| `docker-compose.prod.yml` (producción) | Caddy y nginx | `2` | el propio compose |
+
+Con un valor menor del que toca, el backend tomaría la IP de un proxy como si fuera la
+del cliente y el rate limiting contaría a todo el mundo como un solo visitante. Con uno
+mayor, cualquiera podría inventarse la IP en `X-Forwarded-For`.
+
 ## Docker: toda la plataforma
 
-```bash
-cp .env.example .env          # y completa los valores
-docker compose up -d --build
-```
-
-La app queda en **http://localhost:8090** (cámbialo con `PUERTO_APP`).
+El paso a paso está arriba, en
+[Cómo levantar todo el proyecto](#cómo-levantar-todo-el-proyecto-docker). Aquí va cómo
+está montado.
 
 Cuatro servicios que arrancan en orden, garantizado por `depends_on`:
 
 | Servicio | Qué hace | Arranca cuando |
 |---|---|---|
 | `postgres` | Base de datos, con volumen persistente | — |
-| `migrate` | `prisma migrate deploy` y siembra el catálogo y el admin. **Termina** | `postgres` está *healthy* |
+| `migrate` | `prisma migrate deploy` y siembra el catálogo, el admin y los clientes de demo. **Termina** | `postgres` está *healthy* |
 | `backend` | La API. No migra | `migrate` terminó **con éxito** |
 | `frontend` | nginx: sirve la SPA y hace de proxy a `/api` | `backend` está *healthy* |
 
@@ -245,8 +258,10 @@ dentro de la red de Docker la base es el servicio `postgres:5432` y la app la si
 | `APP_URL_DOCKER` | URL pública de la app. En producción, el dominio real |
 | `JWT_SECRET`, `ADMIN_USER`, `ADMIN_PASSWORD`, `MAIL_FROM`, `RESEND_API_KEY` | Compartidas con el desarrollo |
 
-`TRUST_PROXY` no se define en el `.env` para los contenedores: el compose lo fija en `1`,
-porque el backend siempre va detrás de nginx.
+`TRUST_PROXY` no se define en el `.env` para los contenedores: cada compose lo fija según
+cuántos proxies hay delante, `1` en `docker-compose.yml` (nginx) y `2` en
+`docker-compose.prod.yml` (Caddy y nginx). Ver la tabla de
+[Variables de entorno](#variables-de-entorno).
 
 ### Ejecutar solo el backend, sin compose
 
@@ -265,6 +280,7 @@ docker run --rm --env-file backend.env disagro-migrate
 
 ### Producción: VPS con HTTPS (Caddy)
 
+Es la configuración que corre en https://jeanrodas.lat.
 [`docker-compose.prod.yml`](docker-compose.prod.yml) añade un quinto servicio, **Caddy**,
 que termina el TLS y es el único que publica puertos:
 
@@ -273,7 +289,8 @@ internet → Caddy (80/443, HTTPS) → nginx (80, red interna) → backend → p
 ```
 
 ```bash
-# en el VPS, con el .env de producción copiado por un canal seguro
+# en el VPS
+cp .env.produccion.example .env.produccion    # y cambia TODOS los valores
 docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --build
 ```
 
@@ -288,7 +305,10 @@ docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --bui
   el mundo como un solo visitante.
 - **El `.env` de producción es otro fichero** (`.env.produccion`, tampoco versionado) con
   secretos propios: contraseña de Postgres, `JWT_SECRET` y `ADMIN_PASSWORD` nuevos, nunca
-  los de desarrollo. Las variables están documentadas en [`.env.example`](.env.example).
+  los de desarrollo. Las variables están en
+  [`.env.produccion.example`](.env.produccion.example), cuyos rellenos de `JWT_SECRET` y
+  `ADMIN_PASSWORD` son justo los que el backend rechaza: si se olvida cambiarlos,
+  producción no arranca con un secreto conocido.
 - **La contraseña del admin se aplica al levantar.** El seed es idempotente: si
   `ADMIN_PASSWORD` cambió, actualiza el hash en el primer `up`. Rotarla es editar esa
   línea y volver a levantar.
@@ -314,7 +334,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.produccion up -d --bui
 | **Errores sin fugas**: al cliente solo le llega un mensaje; el detalle queda en el log del servidor | `src/middlewares/error.middleware.ts` |
 | **helmet** y **CORS** restringido a `APP_URL` con credenciales | `src/app.ts` |
 | **Rate limiting por IP** en login, confirmación y canje | `src/middlewares/rate-limit.middleware.ts` |
-| **Secretos fuera del repositorio**: `.env` ignorado y `.env.example` con valores ficticios | `.gitignore`, `.env.example` |
+| **HTTPS en producción**: Caddy obtiene y renueva el certificado, y redirige HTTP a HTTPS | `Caddyfile`, `docker-compose.prod.yml` |
+| **Secretos fuera del repositorio**: `.env` y `.env.produccion` ignorados; los ejemplos solo traen valores de demo para local o rellenos que el backend rechaza | `.gitignore`, `.env.example`, `.env.produccion.example` |
 
 **Rate limiting, valores y porqués:**
 
@@ -338,9 +359,9 @@ sistema en producción faltaría:
   completo al panel.
 - **Bloqueo o retardo progresivo por cuenta**, combinado con el límite por IP y con
   una forma de desbloqueo verificada, para cubrir ataques distribuidos desde muchas IPs.
-- **HTTPS obligatorio con HSTS.** Se resuelve en el despliegue; sin TLS, las cookies
-  de sesión viajan en claro. En producción `NODE_ENV=production` ya marca las cookies
-  como `secure`.
+- **HSTS.** HTTPS ya es obligatorio en producción (Caddy redirige HTTP a HTTPS y las
+  cookies van marcadas `secure`), pero las respuestas no incluyen la cabecera
+  `Strict-Transport-Security`, que le diría al navegador que no intente nunca HTTP.
 - **Invalidación de sesiones del admin.** El JWT no tiene estado: al cerrar sesión se
   borra la cookie, pero un token copiado antes sigue sirviendo hasta que expira (8 h).
   Se resolvería con una versión de sesión en la tabla `Admin` o una lista de revocados.
@@ -363,8 +384,15 @@ sistema en producción faltaría:
 ## Tests
 
 ```bash
-npm test
+npm test                   # desde la raíz: los 160
+cd frontend && npm test    # solo los del frontend: 61
 ```
 
-88 tests unitarios sobre la lógica de dominio (descuentos, totales, generación de
-códigos, canje, métricas), la validación y la plantilla del correo.
+| Qué cubren | Tests |
+|---|---|
+| Backend: dominio (descuentos, totales, códigos, canje, métricas), validación y plantilla del correo | 88 |
+| Backend: coherencia de los datos de demostración con las reglas de descuento | 11 |
+| Frontend: vista previa de descuentos (mismos casos frontera que el backend) y formato | 61 |
+
+Desde la raíz se ejecutan los 160 porque vitest, sin configuración que lo acote, recoge
+también los del frontend.
