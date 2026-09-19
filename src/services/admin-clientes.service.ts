@@ -22,6 +22,8 @@ export interface ClienteResumenDto {
   cantidadItems: number;
   descuentos: { servicios: PorcentajeDescuento; productos: PorcentajeDescuento };
   cantidadCodigos: number;
+  /** Cuántos de esos códigos ya se canjearon en el evento. */
+  cantidadCanjeados: number;
   /** Total con descuento, como string con 2 decimales. */
   total: string;
 }
@@ -58,12 +60,15 @@ export async function listarClientes({ page, limit, buscar }: FiltrosClientes): 
         fechaEvento: true,
         confirmadoEn: true,
         selecciones: { select: { item: { select: { tipo: true, precio: true } } } },
-        _count: { select: { codigos: true } },
+        // Solo el estado de cada código: con eso salen el total y los canjeados en la
+        // misma consulta. _count no sirve para los dos, porque no admite contar la misma
+        // relación dos veces con filtros distintos. Son como mucho 2 códigos por cliente.
+        codigos: { select: { estado: true } },
       },
     }),
   ]);
 
-  const data = clientes.map(({ selecciones, _count, ...cliente }) => {
+  const data = clientes.map(({ selecciones, codigos, ...cliente }) => {
     const descuentos = calcularDescuentos(
       selecciones.map(({ item }) => ({ tipo: item.tipo, precio: item.precio.toString() })),
     );
@@ -71,7 +76,8 @@ export async function listarClientes({ page, limit, buscar }: FiltrosClientes): 
       ...cliente,
       cantidadItems: selecciones.length,
       descuentos: { servicios: descuentos.servicios.porcentaje, productos: descuentos.productos.porcentaje },
-      cantidadCodigos: _count.codigos,
+      cantidadCodigos: codigos.length,
+      cantidadCanjeados: codigos.filter((codigo) => codigo.estado === 'CANJEADO').length,
       total: calcularTotales(descuentos).total.toFixed(2),
     };
   });
