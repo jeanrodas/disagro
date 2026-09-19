@@ -23,6 +23,32 @@ const Porcentaje = ({ valor, tipo }: { valor: number; tipo: 'servicios' | 'produ
 )
 
 /**
+ * "canjeados/total" en la misma columna que antes mostraba solo el total: se ve de
+ * un vistazo quién ya canjeó sin añadir otra columna a una tabla que ya va justa.
+ * En verde si hay al menos un canje; un guion si el cliente no obtuvo códigos.
+ */
+const Canjeados = ({ canjeados, total }: { canjeados: number; total: number }) => {
+  if (total === 0) {
+    return (
+      <span className="text-sm text-disagro-tenue" title="Sin códigos de descuento" data-testid="canjeados">
+        —
+      </span>
+    )
+  }
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${
+        canjeados > 0 ? 'bg-disagro-verde/10 text-disagro-verde-oscuro' : 'bg-disagro-campo text-disagro-texto'
+      }`}
+      title={`${canjeados} de ${total} ${total === 1 ? 'código canjeado' : 'códigos canjeados'}`}
+      data-testid="canjeados"
+    >
+      {canjeados}/{total}
+    </span>
+  )
+}
+
+/**
  * Lista de clientes confirmados. En pantallas chicas la tabla se desplaza en
  * horizontal dentro de su tarjeta: mantiene las columnas legibles sin romper la página.
  */
@@ -37,7 +63,9 @@ export function TablaClientes({ clientes, cargando }: Props) {
               <th className="px-3 py-3 font-semibold">Fecha del evento</th>
               <th className="px-3 py-3 text-center font-semibold">Items</th>
               <th className="px-3 py-3 text-center font-semibold">Descuentos</th>
-              <th className="px-3 py-3 text-center font-semibold">Códigos</th>
+              <th className="px-3 py-3 text-center font-semibold" title="Códigos canjeados / códigos emitidos">
+                Canjeados
+              </th>
               <th className="px-5 py-3 text-right font-semibold">Total</th>
             </tr>
           </thead>
@@ -76,7 +104,9 @@ export function TablaClientes({ clientes, cargando }: Props) {
                     <Porcentaje valor={cliente.descuentos.productos} tipo="productos" />
                   </div>
                 </td>
-                <td className="px-3 py-3.5 text-center text-sm text-disagro-tinta">{cliente.cantidadCodigos}</td>
+                <td className="px-3 py-3.5 text-center">
+                  <Canjeados canjeados={cliente.cantidadCanjeados} total={cliente.cantidadCodigos} />
+                </td>
                 <td className="px-5 py-3.5 text-right font-titulo text-sm font-bold text-disagro-tinta">
                   {formatearQuetzales(cliente.total)}
                 </td>

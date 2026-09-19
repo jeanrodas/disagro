@@ -185,6 +185,8 @@ export interface ClienteResumen {
   /** Solo los porcentajes; el detalle completo está en GET /api/admin/clientes/:id. */
   descuentos: { servicios: PorcentajeDescuento; productos: PorcentajeDescuento }
   cantidadCodigos: number
+  /** Cuántos de esos códigos ya se canjearon. */
+  cantidadCanjeados: number
   /** Total con descuento aplicado. */
   total: Monto
 }
