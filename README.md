@@ -23,9 +23,26 @@ cp .env.example .env     # y completa los valores
 npm install
 npm run db:up            # Postgres en Docker
 npm run db:deploy        # aplica las migraciones
-npm run db:seed          # catálogo (17 items) y admin inicial
+npm run db:seed          # catálogo (17 items), admin inicial y 6 clientes de demostración
 npm run dev              # http://localhost:3000
 ```
+
+### Clientes de demostración
+
+El seed crea 6 clientes **de prueba** ([`prisma/seed/demo.data.ts`](prisma/seed/demo.data.ts))
+para que el panel de administración no arranque vacío. Entre todos cubren cada caso del
+sistema: 5% y 3% en servicios, 5% y 3% en productos, los dos descuentos a la vez y ningún
+descuento, con códigos EMITIDOS y CANJEADOS. Son personas ficticias con correos de
+dominios `.gt` que no existen.
+
+- **Pasan por el flujo real.** Cada uno se valida con el mismo esquema que
+  `POST /api/confirmar` y se crea con `confirmarAsistencia()`: precios de la base,
+  `calcularDescuentos` y el generador de códigos. Los canjes usan `canjearCodigo()`.
+- **Solo se crean los que faltan**, por email. Repetir el seed (ocurre en cada
+  `docker compose up`) no duplica nada ni toca a ningún otro cliente; si un correo de demo
+  ya lo usa otra persona, se deja como está.
+- **`SEED_DEMO=false`** los omite, por ejemplo en un lanzamiento real donde no deben
+  mezclarse con las métricas.
 
 ## Scripts
 
