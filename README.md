@@ -163,6 +163,92 @@ Y el frontend, en otra terminal: `cd frontend && npm install && npm run dev`
 | `npm run db:studio` | Explorador de la base de datos |
 | `npm run docker:up` / `docker:down` / `docker:logs` | Atajos de `docker compose up -d --build`, `down` y `logs -f` |
 
+## Modelo de datos
+
+Seis tablas en PostgreSQL, definidas en [`prisma/schema.prisma`](prisma/schema.prisma),
+que es la fuente de verdad. El diagrama muestra los campos principales de cada una.
+
+```mermaid
+erDiagram
+    Categoria ||--o{ Item : "agrupa"
+    Item ||--o{ SeleccionItem : "aparece en"
+    Cliente ||--o{ SeleccionItem : "elige"
+    Cliente ||--o{ CodigoDescuento : "recibe"
+
+    Categoria {
+        uuid id PK
+        String nombre UK
+        TipoItem tipo "SERVICIO o PRODUCTO"
+    }
+    Item {
+        uuid id PK
+        String nombre UK
+        Decimal precio "Decimal(10,2)"
+        TipoItem tipo "SERVICIO o PRODUCTO"
+        String descripcion
+        Json fichaTecnica "opcional"
+        uuid categoriaId FK
+    }
+    Cliente {
+        uuid id PK
+        String nombre
+        String apellidos
+        String email UK "una confirmación por correo"
+        timestamptz fechaEvento
+        timestamptz confirmadoEn
+        String sessionToken UK "SHA-256 del token, nunca en claro"
+    }
+    SeleccionItem {
+        uuid id PK
+        uuid clienteId FK "único junto con itemId"
+        uuid itemId FK
+    }
+    CodigoDescuento {
+        uuid id PK
+        String codigo UK "DISAGRO-SERV-XXXXXX"
+        TipoItem tipo
+        Int porcentaje
+        EstadoCodigo estado "EMITIDO o CANJEADO"
+        timestamptz creadoEn
+        timestamptz canjeadoEn "nulo hasta el canje"
+        uuid clienteId FK
+    }
+    Admin {
+        uuid id PK
+        String usuario UK
+        String passwordHash "bcrypt"
+    }
+```
+
+`Admin` no se relaciona con nada: el panel lee los datos de los clientes, pero ningún
+registro pertenece a un administrador.
+
+**Decisiones de modelado**
+
+| Decisión | Por qué |
+|---|---|
+| **`Decimal(10,2)` para el precio**, no `Float` | En coma flotante, 524.07 + 500.00 + 475.93 da 1500.0000000000002, y la regla "servicios por encima de Q1,500" daría un 5% que no corresponde. |
+| **`SeleccionItem` como tabla intermedia**, con `@@unique([clienteId, itemId])` | Es la relación muchos a muchos entre cliente e item. Frente a un arreglo de ids, garantiza que cada item exista (clave foránea), impide elegir dos veces el mismo y permite contar los items más elegidos con un índice (`@@index([itemId])`). |
+| **`sessionToken` guarda el SHA-256** del token, y es único | El token en claro solo vive en la cookie y en el enlace del correo. Si se filtrara la base, los hashes no servirían para entrar. |
+| **`CodigoDescuento.estado` como enum** (`EMITIDO` / `CANJEADO`), con `canjeadoEn` | El canje es un solo `UPDATE … WHERE estado = 'EMITIDO'`: quien llega segundo ya no encuentra la fila en ese estado. El enum impide estados inventados, y `canjeadoEn` queda nulo hasta el canje. |
+| **`codigo` único** | Dos clientes nunca comparten código. Si el generador aleatorio repitiera uno, la inserción falla y se reintenta con otro. |
+| **`email` único en `Cliente`** | Una confirmación por persona. La comprobación previa da un 409 claro; la restricción cubre además dos peticiones simultáneas que esa comprobación no ve. |
+| **UUID como identificador** (tipo nativo `uuid` de Postgres) | No son enumerables: con ids 1, 2, 3… bastaría probar números para recorrer `/api/admin/clientes/:id`. |
+| **Borrado en cascada desde `Cliente`, restringido desde `Item` y `Categoria`** | Si se borra un cliente, sus selecciones y códigos se van con él. No se puede borrar un item que alguien eligió, ni una categoría con items. |
+| **Fechas `timestamptz`** | Guardan el instante con zona horaria. `fechaEvento` se guarda como la medianoche de ese día en Guatemala. |
+| **`tipo` repetido en `Categoria` y en `Item`** | Desnormalización consciente: el catálogo se filtra por tipo sin hacer un JOIN (`@@index([tipo])`). El seed comprueba que los dos coincidan. |
+
+**Lo que el esquema no guarda, a propósito**
+
+- **Porcentajes y totales de cada cliente.** Se recalculan desde sus selecciones con la
+  misma función de dominio que usa la confirmación: hay una sola fuente de verdad. La
+  contrapartida es que `SeleccionItem` no congela el precio del momento, así que si
+  cambiara un precio del catálogo, cambiarían también los totales recalculados de
+  clientes anteriores. Lo que sí queda fijo es el porcentaje de cada código emitido. En
+  un sistema real se guardaría el precio en `SeleccionItem`.
+- **El límite de dos códigos por cliente**, uno por tipo. Lo garantiza la lógica de
+  confirmación, no la base: no hay un `@@unique([clienteId, tipo])`.
+
 ## Endpoints
 
 | Método y ruta | Quién | Para qué |
