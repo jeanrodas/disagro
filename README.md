@@ -1,11 +1,131 @@
-# Feria de Promociones Disagro — Backend
+# Feria de Promociones Disagro
 
-API de la plataforma de confirmación de asistencia a la feria de promociones de
-Disagro. Los clientes confirman su asistencia, eligen servicios y productos, y
-reciben códigos de descuento y un portafolio personalizado. Incluye un panel de
-administración para ver los clientes confirmados y sus métricas.
+Plataforma de confirmación de asistencia a la feria de promociones de Disagro. El
+cliente confirma su asistencia, elige servicios y productos, ve en vivo el descuento
+que va obteniendo y recibe códigos de descuento y un portafolio personalizado. Un panel
+de administración muestra los clientes confirmados, sus códigos y las métricas de la feria.
 
-El frontend vive en [`frontend/`](frontend/) como proyecto hermano.
+## Pruébelo en vivo
+
+La plataforma está desplegada en **https://jeanrodas.lat**.
+
+- Formulario de confirmación: https://jeanrodas.lat
+- Panel de administración: https://jeanrodas.lat/admin. Las credenciales del
+  despliegue en vivo se entregan por separado; no están en este repositorio.
+
+También se puede levantar completa en local con un solo comando: ver
+[Cómo levantar todo el proyecto](#cómo-levantar-todo-el-proyecto-docker).
+
+## Arquitectura: dos aplicaciones
+
+Son dos aplicaciones independientes que se integran por una API HTTP, como las
+construirían dos equipos distintos:
+
+| Parte | Dónde | Qué es |
+|---|---|---|
+| **Backend** | la raíz de este repositorio | API REST: Node, TypeScript, Express 5, Prisma y PostgreSQL. Toda la lógica de negocio: descuentos, códigos, sesiones, canje y métricas. |
+| **Frontend** | [`frontend/`](frontend/) | SPA: React, TypeScript, Vite y Tailwind. Consume la API. |
+
+El proyecto empezó como backend y, al estructurarse en dos partes, el backend se quedó
+en la raíz y el frontend en su carpeta. Por eso este README es a la vez la portada del
+proyecto y la documentación técnica del backend; el detalle del frontend está en
+[`frontend/README.md`](frontend/README.md).
+
+- **El backend es autónomo**: se prueba entero por su API, sin interfaz (ver
+  [Endpoints](#endpoints)).
+- **El frontend no guarda ni decide nada por su cuenta**: todo sale de la API. La única
+  regla que replica es la vista previa del descuento mientras el cliente elige, y solo
+  para mostrarla; el cálculo que vale lo hace el backend al confirmar.
+
+```
+navegador → nginx (sirve la SPA y reenvía /api) → backend → PostgreSQL
+            en producción, delante de todo: Caddy (HTTPS)
+```
+
+## Lo destacado
+
+- **Dos niveles de sesión.** El cliente entra sin contraseña, con un token aleatorio de
+  256 bits (guardado como hash) en una cookie httpOnly y en el enlace del correo. El
+  admin, con usuario, contraseña bcrypt y JWT en su propia cookie.
+- **Códigos de descuento con aleatoriedad criptográfica** (`crypto.randomBytes`, sin
+  sesgo de módulo), únicos por restricción de la base.
+- **Canje atómico**: un solo `UPDATE … WHERE estado = 'EMITIDO'`; con peticiones
+  simultáneas, solo una gana.
+- **Dinero sin coma flotante**: `Decimal` en la base y en el dominio, texto en la API.
+- **Rate limiting por IP** en login, confirmación y canje, contando bien los proxies.
+- **Todo dockerizado**: base, migraciones y seed, API y frontend con un
+  `docker compose up`. En producción, HTTPS automático con Caddy.
+- **Datos de demostración** sembrados por el mismo flujo que una confirmación real.
+- **Correo transaccional** con Resend, como respaldo de lo que ya se ve en pantalla.
+
+## Cómo levantar todo el proyecto (Docker)
+
+Solo hace falta **Docker** con Docker Compose. No hace falta Node.
+
+```bash
+git clone https://github.com/jeanrodas/disagro.git
+cd disagro
+cp .env.example .env
+docker compose up -d --build
+```
+
+La primera vez tarda unos minutos, porque construye las imágenes. Después:
+
+| Qué | Dónde |
+|---|---|
+| La app | **http://localhost:8090** |
+| Panel de administración | **http://localhost:8090/admin** |
+| Usuario y contraseña del panel (solo en local) | `admin` / `admin-demo-2026` |
+
+El `.env.example` trae valores **de demostración** que funcionan tal cual. Son públicos a
+propósito y solo sirven para una instalación local: el despliegue en vivo usa su propio
+fichero con secretos generados, y su contraseña no está aquí.
+
+- **Si un puerto está ocupado**, cámbialo en el `.env`: `PUERTO_APP` es el de la app
+  (8090) y `POSTGRES_PORT` el de la base publicada en el host (5434).
+- **Para pararlo**: `docker compose down` conserva los datos; `docker compose down -v`
+  borra la base de datos.
+- **Para ver qué pasa**: `docker compose logs -f`.
+
+## Datos de demostración
+
+El seed crea 6 clientes **de prueba** ([`prisma/seed/demo.data.ts`](prisma/seed/demo.data.ts))
+para que el panel de administración no arranque vacío. Entre todos cubren cada caso del
+sistema: 5% y 3% en servicios, 5% y 3% en productos, los dos descuentos a la vez y ningún
+descuento, con códigos EMITIDOS y CANJEADOS. Son personas ficticias con correos de
+dominios `.gt` que no existen.
+
+- **Pasan por el flujo real.** Cada uno se valida con el mismo esquema que
+  `POST /api/confirmar` y se crea con `confirmarAsistencia()`: precios de la base,
+  `calcularDescuentos` y el generador de códigos. Los canjes usan `canjearCodigo()`.
+- **Solo se crean los que faltan**, por email. Repetir el seed (ocurre en cada
+  `docker compose up`) no duplica nada ni toca a ningún otro cliente; si un correo de demo
+  ya lo usa otra persona, se deja como está.
+- **`SEED_DEMO=false`** los omite, por ejemplo en un lanzamiento real donde no deben
+  mezclarse con las métricas.
+
+## Correo
+
+Los códigos y el portafolio se muestran en pantalla nada más confirmar. El correo es un
+**respaldo**: repite los códigos y trae el enlace para volver al portafolio desde otro
+dispositivo.
+
+- **Requiere `RESEND_API_KEY`.** En local viene vacía: todo funciona igual, y el envío se
+  omite dejando un aviso en el log del backend (`docker compose logs backend`).
+- **Un fallo de Resend no afecta a la confirmación**: el correo se envía después de
+  responder, y el error solo queda en el log.
+- **Para verlo llegar de verdad**, confirma una asistencia en https://jeanrodas.lat.
+
+## Frontend
+
+El detalle del frontend (pantallas, desarrollo con Vite, imagen de nginx) está en
+[`frontend/README.md`](frontend/README.md).
+
+---
+
+# Backend: detalle técnico
+
+Todo lo que sigue documenta el backend, que es la raíz de este repositorio.
 
 ## Stack
 
@@ -26,23 +146,6 @@ npm run db:deploy        # aplica las migraciones
 npm run db:seed          # catálogo (17 items), admin inicial y 6 clientes de demostración
 npm run dev              # http://localhost:3000
 ```
-
-### Clientes de demostración
-
-El seed crea 6 clientes **de prueba** ([`prisma/seed/demo.data.ts`](prisma/seed/demo.data.ts))
-para que el panel de administración no arranque vacío. Entre todos cubren cada caso del
-sistema: 5% y 3% en servicios, 5% y 3% en productos, los dos descuentos a la vez y ningún
-descuento, con códigos EMITIDOS y CANJEADOS. Son personas ficticias con correos de
-dominios `.gt` que no existen.
-
-- **Pasan por el flujo real.** Cada uno se valida con el mismo esquema que
-  `POST /api/confirmar` y se crea con `confirmarAsistencia()`: precios de la base,
-  `calcularDescuentos` y el generador de códigos. Los canjes usan `canjearCodigo()`.
-- **Solo se crean los que faltan**, por email. Repetir el seed (ocurre en cada
-  `docker compose up`) no duplica nada ni toca a ningún otro cliente; si un correo de demo
-  ya lo usa otra persona, se deja como está.
-- **`SEED_DEMO=false`** los omite, por ejemplo en un lanzamiento real donde no deben
-  mezclarse con las métricas.
 
 ## Scripts
 
