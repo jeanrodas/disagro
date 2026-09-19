@@ -68,6 +68,8 @@ services:
       <<: *entorno-backend
       ADMIN_USER: ${ADMIN_USER:?Define ADMIN_USER en .env.produccion}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env.produccion}
+      # Clientes de demostración (prisma/seed/demo.data.ts). `false` para omitirlos
+      SEED_DEMO: ${SEED_DEMO:-true}
     restart: "no"
 
   # ---------------------------------------------------------------------------

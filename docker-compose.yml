@@ -79,6 +79,8 @@ services:
       # Solo las usa el seed del admin; el servidor arranca sin ellas
       ADMIN_USER: ${ADMIN_USER:?Define ADMIN_USER en .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Define ADMIN_PASSWORD en .env}
+      # Clientes de demostración (prisma/seed/demo.data.ts). `false` para omitirlos
+      SEED_DEMO: ${SEED_DEMO:-true}
     # Es de un solo uso: si falla, que se vea, no que reintente en bucle
     restart: "no"
 
